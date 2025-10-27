@@ -1,7 +1,6 @@
 // ClipForge - Tauri Commands
 // Tauri v2.0 command handlers for video processing
 
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs;
 
@@ -103,7 +102,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             validate_video_file
             // Commands will be added in future PRs:
-            // - select_video_file
+            // - select_video_file (will use tauri-plugin-dialog)
             // - get_video_metadata
             // - export_single_clip
             // - export_timeline
