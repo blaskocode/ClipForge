@@ -383,3 +383,143 @@ header h1 {
   margin: 10px 0;
   font-size: 14px;
 }
+
+/* Trim Controls Styles */
+.trim-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  justify-content: center;
+}
+
+.trim-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.trim-input-group label {
+  font-size: 12px;
+  color: #aaa;
+}
+
+.trim-input {
+  padding: 8px;
+  background: #1e1e1e;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: white;
+  width: 120px;
+  font-size: 14px;
+}
+
+.trim-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.trim-input.invalid {
+  border-color: #F44336;
+}
+
+.trim-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trim-button {
+  padding: 8px 16px;
+  background: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.trim-button:hover:not(:disabled) {
+  background: #357abd;
+}
+
+.trim-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trim-range-display {
+  color: #aaa;
+  font-size: 13px;
+  min-width: 200px;
+}
+
+.trim-range-display div {
+  margin: 2px 0;
+}
+
+.trim-reset-button {
+  padding: 8px 16px;
+  background: #666;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.trim-reset-button:hover:not(:disabled) {
+  background: #555;
+}
+
+.trim-reset-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trim-controls .keyboard-hints {
+  display: flex;
+  gap: 15px;
+  color: #888;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.trim-controls .keyboard-hints span {
+  padding: 4px 8px;
+  background: #1e1e1e;
+  border-radius: 3px;
+}
+
+/* Timeline Trim Indicators */
+.trim-overlay {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.trim-handle {
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+  transition: width 0.1s;
+}
+
+.trim-handle.in-point {
+  background: #4CAF50;
+}
+
+.trim-handle.out-point {
+  background: #F44336;
+}
+
+.trim-handle:hover {
+  width: 5px;
+}

@@ -2,6 +2,22 @@
 
 ## What Works (Current State)
 
+### PR #6 Trim Functionality ✅
+- **Non-Destructive Editing** - Clips maintain full timeline length with trim overlays
+- TrimControls component with frame-accurate input (0.033s snapping for 30fps)
+- Manual trim inputs with validation and auto-clamping
+- Keyboard shortcuts (I/O keys) for quick trim setting at playhead position
+- Visual trim indicators: gray overlays + green/red draggable handles
+- Draggable trim handles for intuitive trim adjustment
+- Smart playback that automatically skips trimmed sections
+- Trim-aware preview that clamps to active range (inPoint to outPoint)
+- Frame-accurate snapping on manual input (Enter/Tab to apply)
+- Reset Trim button to restore original duration
+- Delete key with confirmation dialog for selected clips
+- Timeline deselection when clicking empty space
+- Professional UX matching Premiere Pro / Final Cut Pro behavior
+- All 15 manual tests passed ✅
+
 ### PR #5 Video Player Component ✅
 - HTML5 video player with proper path conversion (Tauri v2 `convertFileSrc`)
 - **Universal timeline playback** - Play controls work across all clips
@@ -123,12 +139,17 @@
 - [x] Current time and duration display
 - [x] All tests passed
 
-### PR #6: Trim Functionality ⬜
-- [ ] Trim controls UI
-- [ ] Set in/out point buttons
-- [ ] Manual trim input
-- [ ] Visual trim indicators on timeline
-- [ ] Trim preview
+### PR #6: Trim Functionality ✅
+- [x] Trim controls UI with TrimControls component
+- [x] Set in/out point buttons with I/O keyboard shortcuts
+- [x] Manual trim input with frame-accurate snapping (30fps)
+- [x] Visual trim indicators on timeline (gray overlays + handles)
+- [x] Trim preview with active range clamping
+- [x] Draggable trim handles (green in-point, red out-point)
+- [x] Smart playback skipping trimmed sections
+- [x] Delete key with confirmation dialog
+- [x] Timeline deselection on empty click
+- [x] All 15 manual tests passed
 
 ### PR #7: Export System - Single Clip ⬜
 - [ ] Export button with loading state
@@ -190,14 +211,13 @@
 - [ ] Fix critical issues
 
 ## Current Status Summary
-- **Total Progress**: ~31% (PR #5 complete, tested, ready for PR #6)
-- **PRs Complete**: 5/16 (PR #1: Foundation & Setup ✅, PR #2: File Validation ✅, PR #3: Video Import System ✅, PR #4: Timeline Component ✅, PR #5: Video Player Component ✅)
+- **Total Progress**: ~38% (PR #6 complete, tested, ready for PR #7)
+- **PRs Complete**: 6/16 (PR #1: Foundation ✅, PR #2: File Validation ✅, PR #3: Video Import ✅, PR #4: Timeline ✅, PR #5: Video Player ✅, PR #6: Trim Functionality ✅)
 - **Unit Tests**: 3 passing, 0 failing
-- **Manual Tests**: 24 passing (PR #3: 6, PR #4: 10, PR #5: 8), 0 failing
+- **Manual Tests**: 39 passing (PR #3: 6, PR #4: 10, PR #5: 7, PR #6: 15), 0 failing
 - **Build Status**: Clean builds, no warnings
-- **Time Remaining**: ~48 hours (2 days)
-- **Days Until MVP Deadline**: 2 days
-- **Days Until Final Deadline**: 3 days
+- **MVP Status**: Core functionality complete (import, timeline, player, trim)
+- **Next Up**: PR #7 (Export Trimmed Video) - MVP critical feature
 
 ## Known Issues & Resolutions
 
@@ -326,7 +346,61 @@ test result: ok. 3 passed; 0 failed; 0 ignored
 2. Play/Pause Controls Test ✅  
 3. Time Display Test ✅
 4. Keyboard Shortcuts Test ✅
-5. Playhead Synchronization Test ✅
+5. Clip Switching Test ✅
 6. Error Handling Test ✅
-7. Clip Switching Test ✅
+7. Multiple Clips Test ✅
+
+## PR #6 Summary
+**Status**: ✅ Complete & Tested - All 15 Tests Passed
+**Time**: ~6 hours (including 7 major bug fixes and architecture iterations)
+**Key Deliverables**:
+- TrimControls component with frame-accurate input (0.033s snapping for 30fps)
+- **Non-destructive editing model** - Clips maintain full timeline length with trim metadata
+- Manual trim inputs with validation, auto-clamping, and Enter/Tab to apply
+- Keyboard shortcuts: I/O keys for quick trim setting at playhead position
+- Visual trim indicators: gray overlays showing trimmed portions
+- Draggable trim handles: green (in-point) and red (out-point) with cursor feedback
+- Smart playback loop that automatically skips trimmed sections during preview
+- Trim-aware video preview that clamps display to active range (inPoint to outPoint)
+- Delete key with confirmation dialog for selected clips
+- Timeline deselection when clicking empty space
+- Reset Trim button to restore original duration
+- Professional UX matching Premiere Pro / Final Cut Pro behavior
+- No linter errors or warnings
+
+**Major Issues Resolved**:
+1. Out-point calculation error (relative to in-point vs start of clip)
+2. Playhead jumping on trim changes (architecture iterations)
+3. Manual input cutting off decimals (dual string/numeric state)
+4. Stale closure in keyboard handlers (missing dependencies)
+5. Delete key confirmation dialog not appearing (inline styles vs CSS classes)
+6. Preview showing trimmed content (clamping to active range)
+7. Multiple clip trim independence (closure dependencies)
+
+**Architecture Decisions**:
+- **Non-Destructive Editing**: Clips keep full timeline length, trim points are visual markers
+- **Timeline Calculation**: Uses full durations, not active durations (prevents playhead jumps)
+- **Smart Playback**: Automatically skips trimmed sections without changing timeline structure
+- **Frame-Accurate Input**: All values snap to 30fps grid (0.033s intervals)
+
+**Testing Documentation**:
+- PR6-TESTING-INSTRUCTIONS.md: All 15 test cases completed and verified ✅
+- PR6-COMPLETE.md: Comprehensive summary with technical details and lessons learned
+
+**Test Results**: 15/15 Passed ✅
+1. Set In Point with I Key ✅
+2. Set Out Point with O Key ✅
+3. Trim Range Display ✅
+4. Playback Skips to In-Point ✅
+5. Playback Advances at Out-Point ✅
+6. Draggable Trim Handles ✅
+7. Manual Input with Frame Snapping ✅
+8. Validation & Error Handling ✅
+9. Visual Indicators (Gray Overlays) ✅
+10. Trim Handle Positioning ✅
+11. State Persistence Across Clips ✅
+12. New Clips Start Untrimmed ✅
+13. Preview Respects Trim Points ✅
+14. Timeline Deselection ✅
+15. Delete Key with Confirmation ✅
 

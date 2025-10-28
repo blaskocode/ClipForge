@@ -53,9 +53,20 @@ export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimel
     if (!videoRef.current || !clipAtPlayhead) return;
     
     const video = videoRef.current;
-    const targetTime = clipAtPlayhead.localTime;
+    const clip = clipAtPlayhead.clip;
+    let targetTime = clipAtPlayhead.localTime;
+    
+    // Clamp to active range - don't show trimmed content
+    // If playhead is before in-point, show in-point frame
+    // If playhead is after out-point, show out-point frame
+    if (targetTime < clip.inPoint) {
+      targetTime = clip.inPoint;
+    } else if (targetTime > clip.outPoint) {
+      targetTime = clip.outPoint;
+    }
     
     // Only seek if the difference is significant (more than 0.1 seconds)
+    // This prevents excessive seeking during normal playback
     if (Math.abs(video.currentTime - targetTime) > 0.1) {
       video.currentTime = targetTime;
     }

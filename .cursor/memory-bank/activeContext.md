@@ -1,9 +1,9 @@
 # ClipForge - Active Context
 
 ## Current Work Focus
-✅ **PR #1, PR #2, PR #3, PR #4, and PR #5 Complete!** Ready to begin PR #6: Trim Functionality.
+✅ **PR #1-6 Complete!** Ready to begin PR #7: Export Trimmed Video.
 
-## Current Phase: Video Player Component Complete
+## Current Phase: Trim Functionality Complete
 
 ### Recently Completed
 - ✅ Tauri project created using `npm create tauri-app@latest`
@@ -15,9 +15,10 @@
 - ✅ PR #3: Video Import System - All tasks complete
 - ✅ PR #4: Timeline Component - All tasks complete, all tests passing
 - ✅ PR #5: Video Player Component - All tasks complete, all tests passing
+- ✅ PR #6: Trim Functionality - All tasks complete, all tests passing
 
 ### Currently Working On
-🟢 **Ready for PR #6: Trim Functionality** - All prerequisites met
+🟢 **Ready for PR #7: Export Trimmed Video** - All prerequisites met
 
 ### Recent Accomplishments
 
@@ -83,12 +84,26 @@
 12. ✅ All 7 manual tests passed successfully
 13. ✅ Created comprehensive testing instructions and documentation
 
-### Immediate Next Steps (PR #6)
-1. Create TrimControls component with in/out point inputs
-2. Implement trim logic with validation
-3. Add visual trim indicators on timeline
-4. Implement trim preview functionality
-5. Add keyboard shortcuts for trim points (I/O)
+### Recent Accomplishments (PR #6)
+1. ✅ Created TrimControls component with frame-accurate inputs (30fps snapping)
+2. ✅ **Non-Destructive Editing Model** - Clips maintain full timeline length with trim overlays
+3. ✅ Implemented professional trim behavior matching Premiere Pro/Final Cut Pro
+4. ✅ Added keyboard shortcuts (I/O keys) for quick trim setting
+5. ✅ Visual indicators: gray overlays + green/red draggable trim handles
+6. ✅ Smart playback that automatically skips trimmed sections
+7. ✅ Trim-aware preview that clamps to active range
+8. ✅ Manual input with frame-accurate snapping and validation
+9. ✅ Delete key with confirmation dialog
+10. ✅ Draggable trim handles on timeline
+11. ✅ Fixed 7 major issues during implementation
+12. ✅ All 15 manual tests passed successfully
+
+### Immediate Next Steps (PR #7)
+1. Implement FFmpeg export command in Rust
+2. Handle concatenation of multiple clips
+3. Apply trim points during export (skip trimmed sections)
+4. Add export progress tracking
+5. Create export UI with file picker and progress bar
 
 ### Active Decisions
 
@@ -121,28 +136,29 @@
 10. Set up git (after working code exists)
 
 ## Recent Changes (Last Session)
-- **Major Architecture Refactoring**: Converted video player from clip-specific to universal timeline playback
-- Created `getClipAtPlayhead()` function in App.tsx to determine which clip shows at any timeline position
-- Implemented ~30fps playback loop that advances playhead continuously across all clips
-- Refactored VideoPlayer to receive `clipAtPlayhead` prop instead of `currentClip`
-- Play controls now work across entire timeline, not tied to individual clips
-- Preview always shows playhead position, completely independent of clip selection
-- Fixed Tauri v2 import path for `convertFileSrc` (`@tauri-apps/api/core`)
-- Added MIME type mapping for proper video format support (.mov → video/quicktime)
-- Improved error handling: FFprobe errors now translated to user-friendly messages
-- Redesigned layout using CSS Grid to prevent control overlap
-- All 7 manual tests passed successfully ✅
-- Updated memory bank to reflect PR #5 completed state
-- Ready to proceed with PR #6: Trim Functionality
+- **Non-Destructive Trim System**: Created professional-grade trim functionality
+- Created TrimControls component with frame-accurate input (30fps snapping)
+- Implemented non-destructive editing model (clips maintain full timeline length)
+- Added visual trim indicators: gray overlays + green/red draggable handles
+- Smart playback loop automatically skips trimmed sections during preview
+- Trim-aware preview clamps display to active range (inPoint to outPoint)
+- Keyboard shortcuts: I/O keys for quick trim setting, Delete key for clip deletion
+- Fixed 7 major issues including out-point calculation, playhead jumping, stale closures
+- Manual input with separate string/numeric state for smooth typing
+- Timeline deselection: clicking empty space deselects clips
+- Confirmation dialogs for destructive actions (delete)
+- All 15 manual tests passed successfully ✅
+- Updated memory bank to reflect PR #6 completed state
+- Ready to proceed with PR #7: Export Trimmed Video
 
 ## Current Blockers
-None. All PRs #1, #2, #3, #4, and #5 complete and tested. Ready to proceed to PR #6.
+None. All PRs #1-6 complete and tested. Ready to proceed to PR #7.
 
 ## Context for Next Session
 If returning to this project:
 1. Check memory bank for current state
 2. Resume from activeContext.md → Current Work Focus
-3. Continue with PR #6 tasks (Trim Functionality)
+3. Continue with PR #7 tasks (Export Trimmed Video)
 4. Update activeContext.md after each completed PR
 
 ## Team/Coordination Notes

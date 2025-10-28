@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ImportButton } from "./components/ImportButton";
 import { Timeline } from "./components/Timeline";
 import { VideoPlayer } from "./components/VideoPlayer";
+import { TrimControls } from "./components/TrimControls";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
@@ -185,10 +186,18 @@ function App() {
     setSelectedClipId(clipId);
   };
 
-  // Calculate total timeline duration
+  // Helper function to get active (trimmed) duration of a clip
+  const getActiveClipDuration = (clip: Clip): number => {
+    return clip.outPoint - clip.inPoint;
+  };
+
+  // Calculate total timeline duration using FULL clip durations
+  // Clips maintain their full visual length on timeline (professional non-destructive editing)
+  // Gray overlays show trimmed portions, but clips don't shrink
   const totalTimelineDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
 
-  // Timeline playback loop
+  // Timeline playback loop with smart trim skipping
+  // Timeline shows full clip durations, but playback skips trimmed sections
   useEffect(() => {
     if (!isPlaying) return;
     
@@ -202,23 +211,159 @@ function App() {
           return totalTimelineDuration;
         }
         
+        // Check if we need to skip trimmed sections during playback
+        let accumulatedTime = 0;
+        for (const clip of clips) {
+          const clipStart = accumulatedTime;
+          const clipEnd = accumulatedTime + clip.duration;
+          
+          if (next >= clipStart && next < clipEnd) {
+            // We're in this clip
+            const localTime = next - clipStart;
+            
+            // If we're before the in-point, skip to in-point
+            if (localTime < clip.inPoint) {
+              return clipStart + clip.inPoint;
+            }
+            
+            // If we're at or past the out-point, skip to next clip (or stop)
+            if (localTime >= clip.outPoint) {
+              // Skip to next clip's start
+              if (clipEnd < totalTimelineDuration) {
+                return clipEnd;
+              } else {
+                // This was the last clip, stop
+                setIsPlaying(false);
+                return prev;
+              }
+            }
+            
+            // We're in the active range, continue normally
+            return next;
+          }
+          
+          accumulatedTime += clip.duration;
+        }
+        
         return next;
       });
     }, 33); // ~30fps
     
     return () => clearInterval(interval);
-  }, [isPlaying, totalTimelineDuration]);
+  }, [isPlaying, clips, totalTimelineDuration]);
+
+  // Keyboard handler for Delete/Backspace to delete selected clip
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Delete or Backspace key - delete selected clip
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedClipId) {
+        e.preventDefault();
+        
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.7);
+          z-index: 999;
+        `;
+        
+        // Create confirmation dialog
+        const confirmDialog = document.createElement('div');
+        confirmDialog.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: #333;
+          border: 1px solid #555;
+          border-radius: 5px;
+          padding: 20px;
+          z-index: 1000;
+          box-shadow: 0 0 10px rgba(0,0,0,0.5);
+          text-align: center;
+        `;
+        
+        // Add message
+        const message = document.createElement('p');
+        message.textContent = 'Delete this clip from timeline?';
+        message.style.marginBottom = '20px';
+        confirmDialog.appendChild(message);
+        
+        // Add buttons container
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.style.display = 'flex';
+        buttonsContainer.style.justifyContent = 'center';
+        buttonsContainer.style.gap = '10px';
+        
+        // Add confirm button
+        const confirmButton = document.createElement('button');
+        confirmButton.textContent = 'Delete';
+        confirmButton.style.cssText = `
+          padding: 8px 16px;
+          background: #d9534f;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+        `;
+        confirmButton.onclick = () => {
+          document.body.removeChild(overlay);
+          document.body.removeChild(confirmDialog);
+          handleDeleteClip(selectedClipId);
+        };
+        
+        // Add cancel button
+        const cancelButton = document.createElement('button');
+        cancelButton.textContent = 'Cancel';
+        cancelButton.style.cssText = `
+          padding: 8px 16px;
+          background: #666;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+        `;
+        cancelButton.onclick = () => {
+          document.body.removeChild(overlay);
+          document.body.removeChild(confirmDialog);
+        };
+        
+        buttonsContainer.appendChild(confirmButton);
+        buttonsContainer.appendChild(cancelButton);
+        confirmDialog.appendChild(buttonsContainer);
+        
+        document.body.appendChild(overlay);
+        document.body.appendChild(confirmDialog);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedClipId, clips]);
 
   // Get the clip and local time at current playhead position
+  // Timeline uses FULL clip durations (non-destructive editing)
   const getClipAtPlayhead = (position: number): { clip: Clip; localTime: number } | null => {
     let accumulatedTime = 0;
     
     for (const clip of clips) {
-      const clipDuration = clip.duration;
+      const clipDuration = clip.duration; // Use full duration
       if (position >= accumulatedTime && position < accumulatedTime + clipDuration) {
+        // Map timeline position to video time (simple 1:1 mapping)
+        const localTime = position - accumulatedTime;
+        
         return {
           clip,
-          localTime: position - accumulatedTime
+          localTime: localTime
         };
       }
       accumulatedTime += clipDuration;
@@ -251,6 +396,17 @@ function App() {
     }
   };
 
+  const handleTrimChange = (clipId: string, inPoint: number, outPoint: number) => {
+    // Non-destructive editing: clips maintain full timeline length
+    // Trim points are just metadata - playhead doesn't move
+    setClips(prev => prev.map(clip => 
+      clip.id === clipId 
+        ? { ...clip, inPoint, outPoint }
+        : clip
+    ));
+    // Playhead stays exactly where it is - no timeline position changes
+  };
+
   return (
     <div className={`app ${isDragging ? 'dragging' : ''}`}>
       <header>
@@ -279,14 +435,22 @@ function App() {
           playheadPosition={playheadPosition}
           selectedClipId={selectedClipId}
           onClipSelect={handleClipSelect}
+          onClipDeselect={() => setSelectedClipId(null)}
           onSeek={handleSeek}
           onDeleteClip={handleDeleteClip}
+          onTrimChange={handleTrimChange}
         />
       </div>
 
       {/* Controls Area */}
       <div className="controls-area">
-        <p>Trim controls and export button will go here</p>
+        <TrimControls
+          selectedClip={clips.find(c => c.id === selectedClipId) || null}
+          playheadPosition={playheadPosition}
+          onTrimChange={handleTrimChange}
+          clips={clips}
+          clipAtPlayhead={getClipAtPlayhead(playheadPosition)}
+        />
       </div>
     </div>
   );
