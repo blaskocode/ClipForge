@@ -119,6 +119,15 @@
   - **Files Updated**: App.tsx
   - **Result**: Opens native file manager and highlights exported file
 
+- ✅ **Clip Drag-and-Drop Reordering**: Professional timeline clip reordering
+  - **Feature**: Drag clips to reorder them in the timeline
+  - **Implementation**: Native HTML5 drag-and-drop with edge case handling
+  - **Files Updated**: Timeline.tsx, App.tsx, timeline.css, new clipDragDrop.ts utility
+  - **Professional Features**: Auto-pause during drag, no-op detection, visual feedback, undo/redo support
+  - **Snap-to Behavior**: Clips automatically snap to logical positions (clip boundaries, timeline start)
+  - **Drop Event Fix**: Moved drop handler to timeline container to enable dropping between clips
+  - **Tauri Configuration**: Disabled `dragDropEnabled` in tauri.conf.json to prevent conflicts with custom drag-and-drop
+
 - ✅ **Zoom Toast Removal**: "Never show the 'Timeline Zoom Updated' message"
   - **Problem**: Annoying and unnecessary feedback during zoom operations
   - **Solution**: Removed toast notification from zoom change handler

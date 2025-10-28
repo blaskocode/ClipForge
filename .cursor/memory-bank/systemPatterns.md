@@ -172,6 +172,19 @@ Previous state restored → UI updates
 - Show visual feedback (border highlight, overlay message)
 - Bulk import protection (warning at 20 clips, hard limit at 50)
 
+### Clip Reordering (Drag-and-Drop)
+- Native HTML5 drag-and-drop API for timeline clip reordering
+- Auto-pause playback during drag for clarity
+- Visual feedback: dragged clip opacity + green drop indicator
+- Edge case handling: prevents no-op drags, validates indices, disables during export
+- Undo/redo integration: reordering pushes to history stack
+- Custom drag image showing clip filename
+- Drop indicator shows insertion point between clips
+- Trim handle conflicts prevented with preventDefault()
+- **Professional Snap-to Behavior**: Clips automatically snap to logical positions (clip boundaries, timeline start)
+- **Drop Event Handling**: Drop handler attached to timeline container to enable dropping between clips
+- **Tauri Configuration**: `dragDropEnabled: false` in tauri.conf.json prevents conflicts with custom implementation
+
 ### Professional Keyboard Shortcuts
 - **Cmd+N/Ctrl+N**: New Project
 - **Cmd+S/Ctrl+S**: Save Project

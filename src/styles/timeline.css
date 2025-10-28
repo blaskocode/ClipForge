@@ -76,7 +76,8 @@
 }
 
 /* Clips */
-.clip {
+.clip,
+.timeline-clip {
   position: absolute;
   height: 80px;
   top: 10px;
@@ -93,18 +94,21 @@
   min-width: 50px;
 }
 
-.clip:hover {
+.clip:hover,
+.timeline-clip:hover {
   background: #4a8bd8;
   transform: translateY(-2px);
 }
 
-.clip.selected {
+.clip.selected,
+.timeline-clip.selected {
   background: #4a90e2;
   border-color: #fff;
   box-shadow: 0 0 10px rgba(74, 144, 226, 0.5);
 }
 
-.clip-name {
+.clip-name,
+.timeline-clip-name {
   font-size: 12px;
   text-align: center;
   overflow: hidden;
@@ -115,7 +119,8 @@
 }
 
 /* Delete Button */
-.clip-delete-button {
+.clip-delete-button,
+.timeline-clip-delete-button {
   position: absolute;
   top: 2px;
   right: 2px;
@@ -135,7 +140,8 @@
   transition: background 0.2s;
 }
 
-.clip-delete-button:hover {
+.clip-delete-button:hover,
+.timeline-clip-delete-button:hover {
   background: #e0534f;
 }
 
@@ -277,6 +283,16 @@
   100% { transform: rotate(360deg); }
 }
 
+/* Trim Overlay */
+.trim-overlay {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 2;
+}
+
 /* Trim Handles */
 .trim-handle {
   position: absolute;
@@ -327,4 +343,64 @@
   border-right: 4px solid #fff;
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
+}
+
+/* Drag-and-drop styling */
+.timeline-clip[draggable="true"] {
+  cursor: grab;
+}
+
+.timeline-clip[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.timeline-clip.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+  transform: scale(0.95);
+}
+
+.timeline-clip[draggable="false"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Drop indicator line between clips */
+.timeline-drop-indicator {
+  position: absolute;
+  width: 3px;
+  background: linear-gradient(to bottom, #4CAF50, #66BB6A);
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.8);
+  animation: pulse-indicator 1s ease-in-out infinite;
+}
+
+@keyframes pulse-indicator {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.8);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 12px rgba(76, 175, 80, 1);
+  }
+}
+
+@keyframes snap-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(255, 215, 0, 0.8);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 12px rgba(255, 215, 0, 1);
+  }
+}
+
+/* Prevent text selection during drag */
+.timeline-container.dragging {
+  user-select: none;
+  -webkit-user-select: none;
 }

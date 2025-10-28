@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { ClipThumbnails } from './ClipThumbnails';
+import { reorderClips, canReorderClips, calculateDropIndex, calculateDropIndicatorPosition, createDragImage, cleanupDragImage, calculateSnapZones, findNearestSnapZone, calculateDropIndexFromSnapZone, SnapZone } from '../utils/clipDragDrop';
 
-const PIXELS_PER_SECOND = 50; // Base pixels per second (100% zoom)
+const PIXELS_PER_SECOND = 50;
 
 interface Clip {
   id: string;
@@ -27,6 +28,10 @@ interface TimelineProps {
   onDeleteClip: (clipId: string) => void;
   onTrimChange: (clipId: string, inPoint: number, outPoint: number) => void;
   zoomLevel: number;
+  onClipsReorder: (newClips: Clip[]) => void;
+  isPlaying: boolean;
+  onPause: () => void;
+  isExporting: boolean;
 }
 
 export function Timeline({
@@ -39,42 +44,41 @@ export function Timeline({
   onDeleteClip,
   onTrimChange,
   zoomLevel,
+  onClipsReorder,
+  isPlaying,
+  onPause,
+  isExporting,
 }: TimelineProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
   
-  // Trim dragging state
   const [isDraggingTrim, setIsDraggingTrim] = useState(false);
   const [dragStartX, setDragStartX] = useState(0);
   const [dragStartTime, setDragStartTime] = useState(0);
   const [draggingTrim, setDraggingTrim] = useState<'in' | 'out' | null>(null);
 
-  // Calculate pixels per second based on zoom level
+  const [draggedClipId, setDraggedClipId] = useState<string | null>(null);
+  const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(null);
+  const [snapZones, setSnapZones] = useState<SnapZone[]>([]);
+  const [activeSnapZone, setActiveSnapZone] = useState<SnapZone | null>(null);
+
   const pixelsPerSecond = PIXELS_PER_SECOND * zoomLevel;
 
-  // Calculate total timeline width
   const totalDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
 
-  // Handle timeline click for scrubbing
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!timelineRef.current) return;
     
     const rect = timelineRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     
-    // Ensure clickX is not negative (can happen with scrolling)
     const adjustedClickX = Math.max(0, clickX);
     
-    // Calculate time position
     const timePosition = adjustedClickX / pixelsPerSecond;
     
-    // Calculate maximum allowed position
-    // Use a minimum of 60 seconds or the total duration, whichever is greater
     const maxDuration = Math.max(totalDuration, 60);
     
-    // Clamp the time position between 0 and maxDuration
     const clampedTimePosition = Math.min(Math.max(0, timePosition), maxDuration);
     
-    // Clicking on empty timeline space deselects clip and seeks
     console.log(`Timeline clicked: x=${clickX}, time=${timePosition}, clamped=${clampedTimePosition}`);
     onClipDeselect();
     onSeek(clampedTimePosition);
@@ -175,6 +179,7 @@ export function Timeline({
   // Trim handle dragging handlers
   const handleTrimHandleMouseDown = (e: React.MouseEvent, clipId: string, trimType: 'in' | 'out') => {
     e.stopPropagation();
+    e.preventDefault(); // Prevent clip drag from starting
     setIsDraggingTrim(true);
     setDragStartX(e.clientX);
     setDraggingTrim(trimType);
@@ -225,7 +230,84 @@ export function Timeline({
     setDraggingTrim(null);
   };
 
-  // Add global mouse event listeners for dragging
+  // Clip drag-and-drop handlers
+  const handleClipDragStart = (e: React.DragEvent, clipId: string) => {
+    if (isExporting) {
+      e.preventDefault();
+      return;
+    }
+    
+    if (isPlaying) {
+      onPause();
+    }
+    
+    setDraggedClipId(clipId);
+    
+    // Calculate snap zones for professional positioning
+    const zones = calculateSnapZones(clips, clipId, pixelsPerSecond);
+    setSnapZones(zones);
+    
+    const clip = clips.find(c => c.id === clipId);
+    const dragImage = createDragImage(clip?.filename || 'Clip');
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    
+    setTimeout(() => cleanupDragImage(dragImage), 0);
+    e.currentTarget.classList.add('dragging');
+  };
+
+  const handleClipDragOver = (e: React.DragEvent, targetClipId: string) => {
+    e.preventDefault();
+    
+    if (!draggedClipId || draggedClipId === targetClipId) return;
+    
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
+    const mouseX = e.clientX - rect.left;
+    
+    // Find nearest snap zone
+    const nearestSnapZone = findNearestSnapZone(mouseX, snapZones, 20);
+    
+    if (nearestSnapZone) {
+      setActiveSnapZone(nearestSnapZone);
+      const dropIndex = calculateDropIndexFromSnapZone(clips, draggedClipId, nearestSnapZone);
+      setDropIndicatorIndex(dropIndex);
+    } else {
+      setActiveSnapZone(null);
+      // Fallback to original behavior
+      const dropIndex = calculateDropIndex(clips, draggedClipId, mouseX, pixelsPerSecond);
+      setDropIndicatorIndex(dropIndex);
+    }
+  };
+
+  const handleClipDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    
+    if (!draggedClipId || dropIndicatorIndex === null) return;
+    
+    if (!canReorderClips(clips, draggedClipId, dropIndicatorIndex)) {
+      handleClipDragEnd();
+      return;
+    }
+    
+    const newClips = reorderClips(clips, draggedClipId, dropIndicatorIndex);
+    onClipsReorder(newClips);
+    
+    handleClipDragEnd();
+  };
+
+  const handleClipDragEnd = () => {
+    setDraggedClipId(null);
+    setDropIndicatorIndex(null);
+    setSnapZones([]);
+    setActiveSnapZone(null);
+    
+    document.querySelectorAll('.timeline-clip').forEach(el => {
+      el.classList.remove('dragging');
+    });
+  };
+
   React.useEffect(() => {
     if (isDraggingTrim) {
       document.addEventListener('mousemove', handleMouseMove);
@@ -238,11 +320,10 @@ export function Timeline({
     }
   }, [isDraggingTrim, draggingTrim, dragStartX, dragStartTime, pixelsPerSecond, clips, selectedClipId, onTrimChange]);
 
-  // Generate time markers for ruler
   const generateTimeMarkers = () => {
     const markers = [];
-    const maxTime = Math.max(totalDuration, 60); // At least show 60 seconds
-    const interval = 5; // Mark every 5 seconds
+    const maxTime = Math.max(totalDuration, 60);
+    const interval = 5;
     
     for (let i = 0; i <= maxTime; i += interval) {
       markers.push(i);
@@ -269,11 +350,49 @@ export function Timeline({
         ))}
       </div>
 
+      {dropIndicatorIndex !== null && draggedClipId && (
+        <div
+          className="timeline-drop-indicator"
+          style={{
+            position: 'absolute',
+            left: `${calculateDropIndicatorPosition(clips, dropIndicatorIndex, draggedClipId, pixelsPerSecond)}px`,
+            width: '3px',
+            background: activeSnapZone ? '#4CAF50' : '#4CAF50',
+            height: '100%',
+            pointerEvents: 'none',
+            zIndex: 10,
+            boxShadow: activeSnapZone ? '0 0 12px rgba(76, 175, 80, 1)' : '0 0 8px rgba(76, 175, 80, 0.6)',
+          }}
+        />
+      )}
+
+      {/* Snap zone indicators */}
+      {activeSnapZone && draggedClipId && (
+        <div
+          className="snap-zone-indicator"
+          style={{
+            position: 'absolute',
+            left: `${activeSnapZone.position}px`,
+            width: '2px',
+            background: '#FFD700',
+            height: '100%',
+            pointerEvents: 'none',
+            zIndex: 15,
+            boxShadow: '0 0 8px rgba(255, 215, 0, 0.8)',
+            animation: 'snap-pulse 0.5s ease-in-out infinite',
+          }}
+        />
+      )}
+
       {/* Timeline */}
       <div
         ref={timelineRef}
         className="timeline"
         onClick={handleTimelineClick}
+        onDrop={handleClipDrop}
+        onDragOver={(e) => {
+          e.preventDefault();
+        }}
       >
         {/* Render Clips */}
         {clips.length === 0 ? (
@@ -299,7 +418,11 @@ export function Timeline({
             return (
               <div
                 key={clip.id}
-                className={`clip ${selectedClipId === clip.id ? 'selected' : ''}`}
+                draggable={!isExporting && clips.length > 1}
+                onDragStart={(e) => handleClipDragStart(e, clip.id)}
+                onDragOver={(e) => handleClipDragOver(e, clip.id)}
+                onDragEnd={handleClipDragEnd}
+                className={`timeline-clip ${selectedClipId === clip.id ? 'selected' : ''} ${draggedClipId === clip.id ? 'dragging' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onClipSelect(clip.id);
@@ -307,6 +430,8 @@ export function Timeline({
                 style={{
                   left: `${clipStartX}px`,
                   width: `${clipWidth}px`,
+                  cursor: isExporting ? 'not-allowed' : 'grab',
+                  transition: draggedClipId ? 'none' : 'left 0.2s ease',
                 }}
               >
                 <span className="clip-name">{clip.filename}</span>

@@ -315,6 +315,16 @@ All MVP requirements and professional enhancements have been successfully implem
 - **Rust Naming Convention Fixes**: Fixed all camelCase to snake_case warnings in Rust code (filePath → file_path, defaultFilename → default_filename, timelineState → timeline_state, outputPath → output_path)
 - **Thumbnail Log Cleanup**: Removed annoying "Thumbnail file not found" log messages for cleaner user experience
 - **Open Folder Button Fix**: Updated to use `revealItemInDir` instead of `openPath` for proper native file manager integration
+- **Clip Drag-and-Drop Reordering**: Implemented native HTML5 drag-and-drop for timeline clip reordering
+  - Auto-pause playback during drag for clarity
+  - Edge case handling (no-op detection, single clip handling, export blocking)
+  - Custom drag ghost image with clip filename
+  - Drop indicator between clips with pulsing animation
+  - Full undo/redo integration
+  - Maintained 500-line file limit with clipDragDrop.ts utility
+  - **Professional Snap-to Behavior**: Clips automatically snap to logical positions (clip boundaries, timeline start)
+  - **Fixed Drop Event Issue**: Moved drop handler to timeline container to enable dropping between clips
+  - **Tauri Configuration Fix**: Disabled `dragDropEnabled` in tauri.conf.json to prevent conflicts
 
 ## Current Blockers
 None. Project is complete and ready for distribution or further development.

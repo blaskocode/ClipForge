@@ -15,7 +15,7 @@ import { useHistory, HistoryState } from "./hooks/useHistory";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useExport } from "./hooks/useExport";
 import { usePlaybackLoop } from "./hooks/usePlaybackLoop";
-import { ClipAtPlayhead } from "./types";
+import { ClipAtPlayhead, Clip } from "./types";
 import { createKeyboardHandler } from "./utils/keyboardHandler";
 import { setupDragAndDrop } from "./utils/dragDrop";
 import { processVideoFile } from "./utils/videoProcessing";
@@ -181,6 +181,14 @@ function App() {
       handleTrimChange(clipAtPlayhead.clip.id, clipAtPlayhead.clip.inPoint, clipAtPlayhead.localTime);
       setIsPlaying(false); // Stop playback when Out Point is set
     }
+  };
+
+  // Handle clip reordering
+  const handleClipsReorder = (newClips: Clip[]) => {
+    pushState({
+      clips: newClips,
+      selectedClipId,
+    });
   };
 
   const handlePlayPause = () => {
@@ -408,6 +416,10 @@ function App() {
           onDeleteClip={handleDeleteClip}
           onTrimChange={handleTrimChange}
           zoomLevel={zoomLevel}
+          onClipsReorder={handleClipsReorder}
+          isPlaying={isPlaying}
+          onPause={() => setIsPlaying(false)}
+          isExporting={isExporting}
         />
       </div>
 
