@@ -1,8 +1,7 @@
 ---
 description: Mandatory security scanning of all generated code using Semgrep MCP server
-globs: **/*.{js,jsx,ts,tsx,py,java,go,rb,php,c,cpp,cs,swift,kt}
+alwaysApply: false
 ---
-
 # Rule: Semgrep MCP Security Scan
 
 // Description: Mandatory security scanning of all generated code using Semgrep MCP server

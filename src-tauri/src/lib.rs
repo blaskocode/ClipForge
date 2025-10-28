@@ -3,9 +3,15 @@
 
 use std::path::Path;
 use std::fs;
+use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 #[tauri::command]
 async fn validate_video_file(file_path: String) -> Result<String, String> {
+    validate_video_file_internal(file_path).await
+}
+
+pub async fn validate_video_file_internal(file_path: String) -> Result<String, String> {
     // Check file exists
     if !Path::new(&file_path).exists() {
         return Err("File not found. It may have been moved or deleted.".to_string());
@@ -50,6 +56,120 @@ async fn validate_video_file(file_path: String) -> Result<String, String> {
     }
     
     Ok("Valid".to_string())
+}
+
+#[tauri::command]
+async fn select_video_file(app: tauri::AppHandle) -> Result<String, String> {
+    use std::sync::{Arc, Mutex};
+    use tauri_plugin_dialog::DialogExt;
+    
+    // Use a channel to get the result from the callback
+    let (tx, rx) = std::sync::mpsc::channel();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+    
+    app.dialog()
+        .file()
+        .add_filter("Video Files", &["mp4", "mov", "webm"])
+        .pick_file(move |file_path| {
+            if let Some(tx) = tx.lock().unwrap().take() {
+                let _ = tx.send(file_path);
+            }
+        });
+    
+    // Wait for the result
+    match rx.recv() {
+        Ok(Some(path)) => Ok(path.to_string()),
+        Ok(None) => Err("File selection cancelled".to_string()),
+        Err(_) => Err("Failed to receive file selection result".to_string()),
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct VideoMetadata {
+    pub duration: f64,
+    pub width: i32,
+    pub height: i32,
+    pub codec: String,
+}
+
+#[tauri::command]
+async fn get_video_metadata(app: tauri::AppHandle, file_path: String) -> Result<VideoMetadata, String> {
+    get_video_metadata_internal(app, file_path).await
+}
+
+pub async fn get_video_metadata_internal(app: tauri::AppHandle, file_path: String) -> Result<VideoMetadata, String> {
+    use std::process::Command;
+    
+    // First validate the file
+    let _validation_result = validate_video_file_internal(file_path.clone()).await?;
+    
+    // Get FFprobe path - for testing, we'll use the one in the project root
+    let ffprobe_path = if cfg!(test) || cfg!(debug_assertions) {
+        // Use the one in the project root for testing
+        std::path::PathBuf::from("./ffprobe")
+    } else {
+        // Use the bundled one in production
+        app.path()
+            .app_local_data_dir()
+            .unwrap()
+            .join("binaries")
+            .join("ffprobe")
+    };
+    
+    // Build FFprobe command
+    let output = Command::new(&ffprobe_path)
+        .args(&[
+            "-v", "error",
+            "-show_entries", "format=duration:stream=width,height,codec_name",
+            "-of", "json",
+            &file_path
+        ])
+        .output()
+        .map_err(|e| format!("Failed to execute FFprobe: {}", e))?;
+    
+    if !output.status.success() {
+        return Err(format!("FFprobe failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+    
+    // Parse JSON output
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse FFprobe output: {}", e))?;
+    
+    // Extract metadata
+    let format = json.get("format").ok_or("No format section in FFprobe output")?;
+    let streams = json.get("streams").and_then(|s| s.as_array()).ok_or("No streams section in FFprobe output")?;
+    
+    let video_stream = streams.iter()
+        .find(|s| s.get("codec_type").and_then(|t| t.as_str()) == Some("video"))
+        .ok_or("No video stream found")?;
+    
+    let duration = format.get("duration")
+        .and_then(|d| d.as_str())
+        .and_then(|d| d.parse::<f64>().ok())
+        .ok_or("Failed to parse duration")?;
+    
+    let width = video_stream.get("width")
+        .and_then(|w| w.as_i64())
+        .map(|w| w as i32)
+        .ok_or("Failed to parse width")?;
+    
+    let height = video_stream.get("height")
+        .and_then(|h| h.as_i64())
+        .map(|h| h as i32)
+        .ok_or("Failed to parse height")?;
+    
+    let codec = video_stream.get("codec_name")
+        .and_then(|c| c.as_str())
+        .map(|c| c.to_string())
+        .ok_or("Failed to parse codec")?;
+    
+    Ok(VideoMetadata {
+        duration,
+        width,
+        height,
+        codec,
+    })
 }
 
 #[cfg(test)]
@@ -98,11 +218,12 @@ mod tests {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            validate_video_file
+            validate_video_file,
+            select_video_file,
+            get_video_metadata
             // Commands will be added in future PRs:
-            // - select_video_file (will use tauri-plugin-dialog)
-            // - get_video_metadata
             // - export_single_clip
             // - export_timeline
             // - check_codec_compatibility
