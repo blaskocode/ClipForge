@@ -3,8 +3,13 @@ import { ImportButton } from "./components/ImportButton";
 import { Timeline } from "./components/Timeline";
 import { VideoPlayer } from "./components/VideoPlayer";
 import { TrimControls } from "./components/TrimControls";
+import { ExportButton } from "./components/ExportButton";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { useExport } from "./hooks/useExport";
+import { usePlaybackLoop } from "./hooks/usePlaybackLoop";
+import { openContainingFolder } from "./utils/exportHelpers";
 import "./App.css";
 
 // Temporary placeholder types - will be refined in PR #3
@@ -26,6 +31,16 @@ function App() {
   const [playheadPosition, setPlayheadPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  
+  // Export hook
+  const {
+    isExporting,
+    exportError,
+    exportSuccess,
+    handleExport,
+    clearExportError,
+    clearExportSuccess,
+  } = useExport(clips);
 
   // Set up drag and drop event listeners
   useEffect(() => {
@@ -186,71 +201,19 @@ function App() {
     setSelectedClipId(clipId);
   };
 
-  // Helper function to get active (trimmed) duration of a clip
-  const getActiveClipDuration = (clip: Clip): number => {
-    return clip.outPoint - clip.inPoint;
-  };
-
   // Calculate total timeline duration using FULL clip durations
   // Clips maintain their full visual length on timeline (professional non-destructive editing)
   // Gray overlays show trimmed portions, but clips don't shrink
   const totalTimelineDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
 
   // Timeline playback loop with smart trim skipping
-  // Timeline shows full clip durations, but playback skips trimmed sections
-  useEffect(() => {
-    if (!isPlaying) return;
-    
-    const interval = setInterval(() => {
-      setPlayheadPosition(prev => {
-        const next = prev + 0.033; // ~30fps updates
-        
-        // Stop at end of timeline
-        if (next >= totalTimelineDuration) {
-          setIsPlaying(false);
-          return totalTimelineDuration;
-        }
-        
-        // Check if we need to skip trimmed sections during playback
-        let accumulatedTime = 0;
-        for (const clip of clips) {
-          const clipStart = accumulatedTime;
-          const clipEnd = accumulatedTime + clip.duration;
-          
-          if (next >= clipStart && next < clipEnd) {
-            // We're in this clip
-            const localTime = next - clipStart;
-            
-            // If we're before the in-point, skip to in-point
-            if (localTime < clip.inPoint) {
-              return clipStart + clip.inPoint;
-            }
-            
-            // If we're at or past the out-point, skip to next clip (or stop)
-            if (localTime >= clip.outPoint) {
-              // Skip to next clip's start
-              if (clipEnd < totalTimelineDuration) {
-                return clipEnd;
-              } else {
-                // This was the last clip, stop
-                setIsPlaying(false);
-                return prev;
-              }
-            }
-            
-            // We're in the active range, continue normally
-            return next;
-          }
-          
-          accumulatedTime += clip.duration;
-        }
-        
-        return next;
-      });
-    }, 33); // ~30fps
-    
-    return () => clearInterval(interval);
-  }, [isPlaying, clips, totalTimelineDuration]);
+  usePlaybackLoop({
+    isPlaying,
+    clips,
+    totalTimelineDuration,
+    setIsPlaying,
+    setPlayheadPosition,
+  });
 
   // Keyboard handler for Delete/Backspace to delete selected clip
   useEffect(() => {
@@ -407,6 +370,20 @@ function App() {
     // Playhead stays exactly where it is - no timeline position changes
   };
 
+  // Open folder containing exported file
+  const handleOpenFolder = async (filePath: string) => {
+    try {
+      // Get the directory path
+      const directory = filePath.substring(0, filePath.lastIndexOf('/'));
+      console.log('Opening folder:', directory);
+      await openPath(directory);
+      console.log('Folder opened successfully');
+    } catch (error) {
+      console.error('Failed to open folder:', error);
+      alert(`Failed to open folder: ${error}`);
+    }
+  };
+
   return (
     <div className={`app ${isDragging ? 'dragging' : ''}`}>
       <header>
@@ -451,7 +428,52 @@ function App() {
           clips={clips}
           clipAtPlayhead={getClipAtPlayhead(playheadPosition)}
         />
+        <ExportButton
+          clips={clips}
+          onExport={handleExport}
+          isExporting={isExporting}
+        />
       </div>
+
+      {/* Export Success Banner */}
+      {exportSuccess && (
+        <div className="export-success">
+          <div className="success-header">
+            <strong>Export Successful!</strong>
+            <button onClick={clearExportSuccess}>×</button>
+          </div>
+          <div className="success-message">
+            Video saved to:
+            <div className="success-path">{exportSuccess}</div>
+          </div>
+          <div className="success-actions">
+            <button onClick={() => handleOpenFolder(exportSuccess)} className="open-folder-button">
+              Open Folder
+            </button>
+            <button onClick={clearExportSuccess} className="dismiss-button">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Export Error Display */}
+      {exportError && (
+        <div className="export-error">
+          <div className="error-header">
+            <strong>Export Failed</strong>
+            <button onClick={clearExportError}>×</button>
+          </div>
+          <div className="error-message">
+            {exportError.split('\n').map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+          <button onClick={handleExport} className="retry-button">
+            Retry Export
+          </button>
+        </div>
+      )}
     </div>
   );
 }

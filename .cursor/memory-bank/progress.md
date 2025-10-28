@@ -2,6 +2,22 @@
 
 ## What Works (Current State)
 
+### PR #7 Export System ✅
+- **Professional Single-Pass Export** - Industry-standard FFmpeg filter_complex approach
+- ExportButton component with intelligent loading states ("Exporting..." / "This may take a while...")
+- Professional FFmpeg encoding: single-pass with complex filter chain
+- Hybrid seeking strategy: fast `-ss` before `-i` + precise `trim` filters
+- Automatic resolution normalization: scales all clips to 1280x720 with letterboxing
+- Smart filename generation (first clip name + timestamp, sanitized)
+- File overwrite protection with native confirmation dialog
+- Success banner with "Open Folder" button (opens Downloads folder)
+- Comprehensive error display with full FFmpeg log + retry button
+- Code organization: useExport hook, usePlaybackLoop hook, exportHelpers utilities
+- Frame-accurate trim support (respects inPoint/outPoint)
+- Multi-clip concatenation with mixed resolutions
+- Video-only export support (handles clips without audio)
+- All 10 manual tests passed ✅
+
 ### PR #6 Trim Functionality ✅
 - **Non-Destructive Editing** - Clips maintain full timeline length with trim overlays
 - TrimControls component with frame-accurate input (0.033s snapping for 30fps)
@@ -151,24 +167,29 @@
 - [x] Timeline deselection on empty click
 - [x] All 15 manual tests passed
 
-### PR #7: Export System - Single Clip ⬜
-- [ ] Export button with loading state
-- [ ] Save file dialog
-- [ ] Smart filename generation
-- [ ] export_single_clip() Rust command
-- [ ] FFmpeg trim integration
+### PR #7: Export System ✅ (Combined PR #7 + PR #8 Multi-Clip)
+- [x] Export button with intelligent loading states
+- [x] Save file dialog with default Downloads folder
+- [x] Smart filename generation with sanitization
+- [x] File overwrite protection with confirmation
+- [x] export_video() Rust command with professional single-pass FFmpeg
+- [x] Frame-accurate trim integration (hybrid `-ss` + `trim` filters)
+- [x] Multi-clip concatenation with resolution normalization
+- [x] Success banner with "Open Folder" button
+- [x] Comprehensive error display with FFmpeg logs
+- [x] Code refactoring (useExport, usePlaybackLoop, exportHelpers)
+- [x] All 10 manual tests passed
 
-### PR #8: Codec Compatibility Check ⬜
-- [ ] check_codec_compatibility() Rust command
-- [ ] Codec comparison logic
-- [ ] Warning dialog for mismatched codecs
+### PR #8: Codec Compatibility Check ⬜ (Skipped - handled by normalization in PR #7)
+- [x] Not needed - export system normalizes all clips to 1280x720 H.264
+- [x] Resolution/codec mismatches automatically handled
 
-### PR #9: Export System - Timeline Concatenation ⬜
-- [ ] Export decision logic (single vs timeline)
-- [ ] export_timeline() Rust command
-- [ ] Handle trimmed clips
-- [ ] FFmpeg concat integration
-- [ ] Temporary file cleanup
+### PR #9: Export System - Timeline Concatenation ⬜ (Completed in PR #7)
+- [x] Export decision logic integrated
+- [x] Multi-clip export with single-pass FFmpeg
+- [x] Trim points respected during export
+- [x] FFmpeg filter_complex concatenation
+- [x] No temporary files needed (single-pass approach)
 
 ### PR #10: Clear Timeline Feature ⬜
 - [ ] Clear timeline button
@@ -211,13 +232,13 @@
 - [ ] Fix critical issues
 
 ## Current Status Summary
-- **Total Progress**: ~38% (PR #6 complete, tested, ready for PR #7)
-- **PRs Complete**: 6/16 (PR #1: Foundation ✅, PR #2: File Validation ✅, PR #3: Video Import ✅, PR #4: Timeline ✅, PR #5: Video Player ✅, PR #6: Trim Functionality ✅)
+- **Total Progress**: ~56% (PR #7 complete - Core MVP feature-complete!)
+- **PRs Complete**: 9/16 effective (PR #1-7 ✅, PR #8-9 integrated into PR #7)
 - **Unit Tests**: 3 passing, 0 failing
-- **Manual Tests**: 39 passing (PR #3: 6, PR #4: 10, PR #5: 7, PR #6: 15), 0 failing
+- **Manual Tests**: 49 passing (PR #3: 6, PR #4: 10, PR #5: 7, PR #6: 15, PR #7: 10), 0 failing
 - **Build Status**: Clean builds, no warnings
-- **MVP Status**: Core functionality complete (import, timeline, player, trim)
-- **Next Up**: PR #7 (Export Trimmed Video) - MVP critical feature
+- **MVP Status**: ✅ **COMPLETE** - All core features working (import, timeline, player, trim, export)
+- **Next Up**: Optional enhancements (PR #10+) or polish & user testing
 
 ## Known Issues & Resolutions
 
@@ -401,6 +422,72 @@ test result: ok. 3 passed; 0 failed; 0 ignored
 11. State Persistence Across Clips ✅
 12. New Clips Start Untrimmed ✅
 13. Preview Respects Trim Points ✅
+
+---
+
+## PR #7: Export System (Oct 28, 2025)
+
+**Status**: ✅ Complete & Tested - All 10 Tests Passed
+**Time**: ~8 hours (including professional refactoring and 3 major bug fixes)
+**Scope**: Combined PR #7 (Export Trimmed Video) + PR #8 (Multi-Clip Export)
+**Key Deliverables**:
+- ExportButton component with intelligent loading states ("Exporting..." / "This may take a while...")
+- **Professional single-pass FFmpeg export** - Industry-standard filter_complex approach
+- Hybrid seeking strategy: fast `-ss` before `-i` + precise `trim` filters
+- Automatic resolution normalization: scales all clips to 1280x720 with letterboxing
+- Smart filename generation: first clip name + timestamp, sanitized (allows user override)
+- File overwrite protection with native confirmation dialog
+- Success banner with "Open Folder" button (opens Downloads folder)
+- Comprehensive error display with full FFmpeg log and retry button
+- Code organization: useExport hook, usePlaybackLoop hook, exportHelpers utilities
+- Frame-accurate trim support (respects inPoint/outPoint during export)
+- Multi-clip concatenation with mixed resolutions and codecs
+- Video-only export support (handles clips without audio)
+- No linter errors or warnings
+
+**Major Issues Resolved**:
+1. **Trim accuracy** - Initial `-ss` before `-i` with `-c copy` only sought to keyframes
+   - **Fix**: Moved `-ss` positioning + use `trim` filters in filter_complex for frame accuracy
+2. **Multi-clip concatenation failure** - Second clip skipped, clips out of order
+   - **Fix**: Switched from concat demuxer to concat filter with resolution normalization
+3. **Audio stream handling** - FFmpeg error when clips had no audio streams
+   - **Fix**: Handled optional audio streams in filter_complex (`:a?` syntax)
+4. **Mixed resolutions** - FFmpeg error when concatenating different resolutions
+   - **Fix**: Added `scale` and `pad` filters to normalize all clips to 1280x720
+5. **"Open Folder" not working** - No error, but Finder didn't open
+   - **Fix**: Added debug logging and direct `openPath` call (resolved by user confirmation)
+
+**Architecture Decisions**:
+- **Single-Pass Export**: Professional approach using filter_complex (no temp files, one encode)
+- **Hybrid Seeking**: Fast `-ss` before `-i` for speed + precise `trim` filters for accuracy
+- **Resolution Normalization**: All clips scaled to 1280x720 with letterboxing for compatibility
+- **H.264/AAC Encoding**: Most compatible format (MP4 with H.264 video, AAC audio)
+- **Default to Downloads**: Industry standard for exported files
+- **Filename Sanitization**: Suggest clean name but allow user override (OS handles invalid chars)
+- **500-Line Rule Compliance**: Extracted hooks (useExport, usePlaybackLoop) and utilities (exportHelpers)
+
+**Testing Documentation**:
+- PR7-TESTING-INSTRUCTIONS.md: All 10 test cases completed and verified ✅
+- PR7-IMPLEMENTATION-COMPLETE.md: Initial implementation summary
+- PR7-REFACTORING-COMPLETE.md: 500-line rule compliance documentation
+- PR7-TRIM-FIX.md: Frame-accurate trim fix details
+- PR7-CONCAT-FIX.md: Multi-clip concatenation fix details
+- PR7-PROFESSIONAL-EXPORT.md: Single-pass approach documentation
+
+**Test Results**: 10/10 Passed ✅
+1. Basic Single Clip Export ✅
+2. Single Clip with Trim ✅
+3. Multiple Clips (No Trim) ✅
+4. Multiple Clips with Trim ✅
+5. Mixed Resolutions ✅
+6. Filename & Overwrite
+   - 6a: Smart Filename Generation ✅
+   - 6b: File Overwrite Protection ✅
+   - 6c: Special Characters in Filename ✅
+7. Cancel Export ✅
+8. Error Handling ✅
+9. Success Notification & Open Folder ✅
+10. Loading States ✅
 14. Timeline Deselection ✅
 15. Delete Key with Confirmation ✅
 

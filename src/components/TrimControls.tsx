@@ -20,7 +20,7 @@ interface TrimControlsProps {
   clipAtPlayhead: { clip: Clip; localTime: number } | null; // Current clip and video time
 }
 
-export function TrimControls({ selectedClip, playheadPosition, onTrimChange, clips, clipAtPlayhead }: TrimControlsProps) {
+export function TrimControls({ selectedClip, playheadPosition, onTrimChange, clips }: TrimControlsProps) {
   const [inPoint, setInPoint] = useState(0);
   const [outPoint, setOutPoint] = useState(0);
   const [inPointInput, setInPointInput] = useState("0.000");
