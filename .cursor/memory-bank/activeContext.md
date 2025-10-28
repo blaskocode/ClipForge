@@ -312,6 +312,9 @@ All MVP requirements and professional enhancements have been successfully implem
 - **In/Out Point Timing Fix**: Removed playheadPosition from keyboard handler dependency array to fix timing issues during playback
 - **Dialog API Fix**: Restored file picker and export path functionality using correct Tauri v2 callback-based API
 - **Full Application Build**: Successfully built complete application with .app bundle and .dmg installer
+- **Rust Naming Convention Fixes**: Fixed all camelCase to snake_case warnings in Rust code (filePath → file_path, defaultFilename → default_filename, timelineState → timeline_state, outputPath → output_path)
+- **Thumbnail Log Cleanup**: Removed annoying "Thumbnail file not found" log messages for cleaner user experience
+- **Open Folder Button Fix**: Updated to use `revealItemInDir` instead of `openPath` for proper native file manager integration
 
 ## Current Blockers
 None. Project is complete and ready for distribution or further development.

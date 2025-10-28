@@ -101,6 +101,24 @@
   - **Solution**: Added `playheadPositionRef` for synchronous access, removed stale state dependencies
   - **Technical Details**: useRef provides real-time access without waiting for React re-renders
 
+- ✅ **Rust Naming Convention Warnings**: Fixed all camelCase to snake_case warnings
+  - **Problem**: Rust compiler warnings about variable naming conventions
+  - **Solution**: Converted all camelCase variables to snake_case (filePath → file_path, defaultFilename → default_filename, timelineState → timeline_state, outputPath → output_path)
+  - **Files Updated**: lib.rs, thumbnails.rs, export.rs
+  - **Result**: Clean compilation with no warnings
+
+- ✅ **Thumbnail Log Cleanup**: Removed annoying log messages
+  - **Problem**: "Thumbnail file not found after FFmpeg success" messages cluttering output
+  - **Solution**: Removed all thumbnail-related log messages for cleaner user experience
+  - **Files Updated**: thumbnails.rs
+  - **Result**: Silent error handling with graceful degradation
+
+- ✅ **Open Folder Button Fix**: Proper native file manager integration
+  - **Problem**: Open Folder button not working correctly with native file manager
+  - **Solution**: Updated to use `revealItemInDir` instead of `openPath` for proper folder opening
+  - **Files Updated**: App.tsx
+  - **Result**: Opens native file manager and highlights exported file
+
 - ✅ **Zoom Toast Removal**: "Never show the 'Timeline Zoom Updated' message"
   - **Problem**: Annoying and unnecessary feedback during zoom operations
   - **Solution**: Removed toast notification from zoom change handler
