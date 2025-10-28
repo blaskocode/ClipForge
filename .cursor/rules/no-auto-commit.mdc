@@ -1,0 +1,58 @@
+---
+alwaysApply: true
+---
+
+# No Automatic Git Commits
+
+## Description
+Prevents the AI from running `git commit` commands automatically. Only commit when the user explicitly requests it.
+
+## Rule
+NEVER run `git commit` or `git add` commands unless the user explicitly asks you to commit changes.
+
+### When NOT to commit:
+- After completing tasks
+- After fixing bugs or errors
+- After updating files
+- After code changes
+
+### When commits ARE allowed:
+- User explicitly says "commit" or "git commit"
+- User says "save to git" or similar explicit instruction
+
+### What to do instead:
+- Make the requested code changes
+- Tell the user what changed
+- Optionally mention "ready to commit when you are"
+- Don't attempt the commit yourself
+
+## Example
+❌ Bad: Automatically running `git commit` after making changes
+✅ Good: Making changes and saying "Changes complete. Ready to commit when you are."
+# No Automatic Git Commits
+
+## Description
+Prevents the AI from running `git commit` commands automatically. Only commit when the user explicitly requests it.
+
+## Rule
+NEVER run `git commit` or `git add` commands unless the user explicitly asks you to commit changes.
+
+### When NOT to commit:
+- After completing tasks
+- After fixing bugs or errors
+- After updating files
+- After code changes
+
+### When commits ARE allowed:
+- User explicitly says "commit" or "git commit"
+- User says "save to git" or similar explicit instruction
+
+### What to do instead:
+- Make the requested code changes
+- Tell the user what changed
+- Optionally mention "ready to commit when you are"
+- Don't attempt the commit yourself
+
+## Example
+❌ Bad: Automatically running `git commit` after making changes
+✅ Good: Making changes and saying "Changes complete. Ready to commit when you are."

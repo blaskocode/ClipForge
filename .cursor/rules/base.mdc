@@ -1,0 +1,46 @@
+# ClipForge Base Rules
+
+## Project Context
+ClipForge is a desktop video editor built with Tauri 2.0, React, and FFmpeg.
+
+**Tech Stack:**
+- Frontend: React 18 + TypeScript + Vite
+- Backend: Rust + Tauri 2.0
+- Video: FFmpeg/FFprobe (bundled as binaries)
+
+## Development Guidelines
+
+### Code Style
+- Use TypeScript for frontend
+- Use Rust 2021 edition
+- Follow existing code patterns
+- Keep functions focused and small
+- Add clear comments for complex logic
+
+### File Organization
+- React components go in `src/components/`
+- Helper functions go in `src/utils/`
+- Tauri commands go in `src-tauri/src/lib.rs`
+- FFmpeg binaries stay in `src-tauri/binaries/`
+
+### State Management
+- All app state in root App component
+- Use useState hooks for local state
+- Lift state up when needed across components
+- No Redux for MVP (keep it simple)
+
+### Error Handling
+- All Tauri commands return `Result<String, String>`
+- Use try-catch in React for invoke calls
+- Provide user-friendly error messages
+- Log technical details to console
+
+### Testing Approach
+- Manual testing for MVP
+- Test in dev mode first
+- Test in packaged app before release
+- Use the test checklist from PRD
+
+## Current Status
+- PR #1: Complete ✅
+- Next: PR #2 (File Validation System)

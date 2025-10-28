@@ -1,0 +1,53 @@
+# ClipForge Project Structure
+
+## Project Organization
+
+### Root Directory
+- **Location**: `/Users/courtneyblaskovich/Documents/Projects/ClipForge/`
+- **No nested subdirectories** - project files are directly in this root
+
+### Key Directories
+```
+ClipForge/
+├── src/                    # React + TypeScript frontend
+│   ├── components/         # UI components
+│   ├── utils/              # Helper functions
+│   ├── App.tsx             # Root app component
+│   ├── App.css             # Application styles
+│   └── main.tsx            # Entry point
+│
+├── src-tauri/              # Rust + Tauri backend
+│   ├── src/
+│   │   ├── lib.rs         # Tauri command handlers
+│   │   └── main.rs        # Binary entry point
+│   ├── binaries/          # FFmpeg binaries
+│   ├── Cargo.toml         # Rust dependencies
+│   └── tauri.conf.json    # Tauri configuration
+│
+└── clipforge_prd.md       # Product requirements (reference)
+```
+
+### File Paths
+- **Frontend code**: `src/App.tsx`, `src/components/`, etc.
+- **Backend code**: `src-tauri/src/lib.rs`
+- **Config**: `src-tauri/tauri.conf.json`, `package.json` in root
+- **Docs**: `clipforge_prd.md`, `clipforge-arch.md`, `clipforge-tasklist.md`
+- **Binaries**: `src-tauri/binaries/ffmpeg`, `src-tauri/binaries/ffprobe`
+
+### Important Notes
+- Project root IS `/Users/courtneyblaskovich/Documents/Projects/ClipForge/`
+- Do NOT nest in `ClipForge/ClipForge/` subdirectory
+- All commands run from project root
+- Reference files (PRD, arch, tasks) are at root level
+
+## Commands Run From Project Root
+```bash
+cd /Users/courtneyblaskovich/Documents/Projects/ClipForge
+npm run tauri dev      # Start dev server
+npm run tauri build    # Build production
+```
+
+## Files to NEVER Delete
+- `src-tauri/binaries/ffmpeg` and `ffprobe` (bundled binaries, 76MB each)
+- `clipforge_prd.md`, `clipforge-arch.md`, `clipforge-tasklist.md` (reference docs)
+- `src-tauri/tauri.conf.json` (Tauri configuration)

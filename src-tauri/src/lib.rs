@@ -56,7 +56,6 @@ async fn validate_video_file(file_path: String) -> Result<String, String> {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::Path;
 
     #[tokio::test]
     async fn test_validate_nonexistent_file() {

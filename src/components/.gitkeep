@@ -1,0 +1,8 @@
+# Components directory
+# This will contain:
+# - VideoPlayer.tsx
+# - Timeline.tsx
+# - TrimControls.tsx
+# - ExportButton.tsx
+# - ImportButton.tsx
+
