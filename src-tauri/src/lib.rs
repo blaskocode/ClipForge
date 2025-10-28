@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::fs;
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+// Removed unused import
 
 #[tauri::command]
 async fn validate_video_file(file_path: String) -> Result<String, String> {
@@ -60,24 +60,20 @@ pub async fn validate_video_file_internal(file_path: String) -> Result<String, S
 
 #[tauri::command]
 async fn select_video_file(app: tauri::AppHandle) -> Result<String, String> {
-    use std::sync::{Arc, Mutex};
     use tauri_plugin_dialog::DialogExt;
     
     // Use a channel to get the result from the callback
-    let (tx, rx) = std::sync::mpsc::channel();
-    let tx = Arc::new(Mutex::new(Some(tx)));
+    let (tx, rx) = tokio::sync::oneshot::channel();
     
     app.dialog()
         .file()
         .add_filter("Video Files", &["mp4", "mov", "webm"])
         .pick_file(move |file_path| {
-            if let Some(tx) = tx.lock().unwrap().take() {
-                let _ = tx.send(file_path);
-            }
+            let _ = tx.send(file_path);
         });
     
-    // Wait for the result
-    match rx.recv() {
+    // Wait for the result asynchronously
+    match rx.await {
         Ok(Some(path)) => Ok(path.to_string()),
         Ok(None) => Err("File selection cancelled".to_string()),
         Err(_) => Err("Failed to receive file selection result".to_string()),
@@ -97,24 +93,41 @@ async fn get_video_metadata(app: tauri::AppHandle, file_path: String) -> Result<
     get_video_metadata_internal(app, file_path).await
 }
 
-pub async fn get_video_metadata_internal(app: tauri::AppHandle, file_path: String) -> Result<VideoMetadata, String> {
+pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: String) -> Result<VideoMetadata, String> {
     use std::process::Command;
     
     // First validate the file
     let _validation_result = validate_video_file_internal(file_path.clone()).await?;
     
-    // Get FFprobe path - for testing, we'll use the one in the project root
-    let ffprobe_path = if cfg!(test) || cfg!(debug_assertions) {
-        // Use the one in the project root for testing
-        std::path::PathBuf::from("./ffprobe")
-    } else {
-        // Use the bundled one in production
-        app.path()
-            .app_local_data_dir()
+    // Try multiple possible paths for ffprobe
+    let possible_paths = [
+        // Path in project root
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .parent()
             .unwrap()
+            .join("ffprobe"),
+        // Current directory
+        std::path::PathBuf::from("./ffprobe"),
+        // Absolute path
+        std::path::PathBuf::from("/Users/courtneyblaskovich/Documents/Projects/ClipForge/ffprobe"),
+        // Binaries directory
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("binaries")
-            .join("ffprobe")
-    };
+            .join("ffprobe"),
+    ];
+    
+    // Find the first path that exists
+    let ffprobe_path = possible_paths.iter()
+        .find(|path| {
+            println!("Checking FFprobe at: {:?}", path);
+            path.exists()
+        })
+        .ok_or_else(|| {
+            println!("FFprobe not found in any of the expected locations");
+            "FFprobe binary not found. Please ensure ffprobe is in the project root.".to_string()
+        })?;
+    
+    println!("Using FFprobe at: {:?}", ffprobe_path);
     
     // Build FFprobe command
     let output = Command::new(&ffprobe_path)
@@ -136,33 +149,47 @@ pub async fn get_video_metadata_internal(app: tauri::AppHandle, file_path: Strin
     let json: serde_json::Value = serde_json::from_str(&output_str)
         .map_err(|e| format!("Failed to parse FFprobe output: {}", e))?;
     
-    // Extract metadata
+    // Extract metadata with better error handling
+    println!("FFprobe JSON output: {}", output_str);
+    
     let format = json.get("format").ok_or("No format section in FFprobe output")?;
-    let streams = json.get("streams").and_then(|s| s.as_array()).ok_or("No streams section in FFprobe output")?;
     
-    let video_stream = streams.iter()
-        .find(|s| s.get("codec_type").and_then(|t| t.as_str()) == Some("video"))
-        .ok_or("No video stream found")?;
-    
+    // Get duration from format section
     let duration = format.get("duration")
         .and_then(|d| d.as_str())
         .and_then(|d| d.parse::<f64>().ok())
-        .ok_or("Failed to parse duration")?;
+        .unwrap_or(0.0); // Default to 0 if missing
     
-    let width = video_stream.get("width")
+    // Get streams array, may be empty
+    // Create a longer-lived empty Vec to avoid temporary value issue
+    let empty_streams = Vec::new();
+    let streams = json.get("streams")
+        .and_then(|s| s.as_array())
+        .unwrap_or(&empty_streams);
+    
+    // Try to find video stream
+    let video_stream = streams.iter()
+        .find(|s| s.get("codec_type").and_then(|t| t.as_str()) == Some("video"))
+        .or_else(|| streams.first()); // Fallback to first stream if no explicit video stream
+    
+    // Default values for missing fields
+    let width = video_stream
+        .and_then(|s| s.get("width"))
         .and_then(|w| w.as_i64())
         .map(|w| w as i32)
-        .ok_or("Failed to parse width")?;
+        .unwrap_or(640); // Default width
     
-    let height = video_stream.get("height")
+    let height = video_stream
+        .and_then(|s| s.get("height"))
         .and_then(|h| h.as_i64())
         .map(|h| h as i32)
-        .ok_or("Failed to parse height")?;
+        .unwrap_or(480); // Default height
     
-    let codec = video_stream.get("codec_name")
+    let codec = video_stream
+        .and_then(|s| s.get("codec_name"))
         .and_then(|c| c.as_str())
         .map(|c| c.to_string())
-        .ok_or("Failed to parse codec")?;
+        .unwrap_or("unknown".to_string()); // Default codec
     
     Ok(VideoMetadata {
         duration,

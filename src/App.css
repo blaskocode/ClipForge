@@ -121,11 +121,160 @@ header h1 {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .timeline-placeholder {
   text-align: center;
   color: #666;
+}
+
+/* Timeline Container */
+.timeline-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #2a2a2a;
+}
+
+/* Time Ruler */
+.time-ruler {
+  height: 30px;
+  position: relative;
+  border-bottom: 1px solid #444;
+  background: #2a2a2a;
+}
+
+.time-marker {
+  position: absolute;
+  height: 100%;
+}
+
+.time-label {
+  position: absolute;
+  top: 4px;
+  left: 2px;
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+}
+
+.marker-line {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 8px;
+  background: #666;
+}
+
+/* Timeline */
+.timeline {
+  position: relative;
+  height: calc(100% - 30px);
+  min-width: 100%;
+  cursor: pointer;
+  background: #2a2a2a;
+}
+
+/* Empty State */
+.timeline-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  font-size: 14px;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Clips */
+.clip {
+  position: absolute;
+  height: 80px;
+  top: 10px;
+  background: #3a7bc8;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.2s;
+  min-width: 50px;
+}
+
+.clip:hover {
+  background: #4a8bd8;
+  transform: translateY(-2px);
+}
+
+.clip.selected {
+  background: #4a90e2;
+  border-color: #fff;
+  box-shadow: 0 0 10px rgba(74, 144, 226, 0.5);
+}
+
+.clip-name {
+  font-size: 12px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  padding: 0 30px;
+}
+
+/* Delete Button */
+.clip-delete-button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  background: #d9534f;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition: background 0.2s;
+}
+
+.clip-delete-button:hover {
+  background: #e0534f;
+}
+
+/* Playhead */
+.playhead {
+  position: absolute;
+  width: 2px;
+  height: 100%;
+  background: #f00;
+  top: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -6px;
+  width: 14px;
+  height: 14px;
+  background: #f00;
+  border-radius: 50%;
+  border: 2px solid #fff;
 }
 
 /* Controls Area */

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ImportButton } from "./components/ImportButton";
+import { Timeline } from "./components/Timeline";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
@@ -85,6 +86,7 @@ function App() {
   };
 
   const processVideoFile = async (filePath: string) => {
+    console.log("processVideoFile called with path:", filePath);
     try {
       // Check clip limit - hard limit at 50 clips
       if (clips.length >= 50) {
@@ -100,14 +102,17 @@ function App() {
         if (!shouldContinue) return;
       }
 
+      console.log("Validating video file...");
       // First validate the file
       const validationResult = await invoke<string>("validate_video_file", { filePath });
+      console.log("Validation result:", validationResult);
       
       if (validationResult.startsWith("WARNING")) {
         const shouldContinue = confirm(`${validationResult}\n\nDo you want to continue?`);
         if (!shouldContinue) return;
       }
 
+      console.log("Getting video metadata...");
       // Get metadata
       const metadata = await invoke<{
         duration: number;
@@ -115,6 +120,7 @@ function App() {
         height: number;
         codec: string;
       }>("get_video_metadata", { filePath });
+      console.log("Metadata:", metadata);
 
       const newClip: Clip = {
         id: crypto.randomUUID(),
@@ -128,16 +134,52 @@ function App() {
         outPoint: metadata.duration
       };
       
-      setClips(prev => [...prev, newClip]);
+      console.log("New clip created:", newClip);
+      setClips(prev => {
+        console.log("Setting clips, prev length:", prev.length);
+        const updated = [...prev, newClip];
+        console.log("Updated clips length:", updated.length);
+        return updated;
+      });
       
     } catch (error) {
       console.error("Import failed:", error);
-      alert(`Import failed: ${error}`);
+      // Don't use alert which requires dialog permission
+      console.error(`Import failed: ${error}`);
+      // Display error in UI instead
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error-message';
+      errorDiv.textContent = `Import failed: ${error}`;
+      errorDiv.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #d9534f; color: white; padding: 10px 20px; border-radius: 5px; z-index: 1000;';
+      document.body.appendChild(errorDiv);
+      setTimeout(() => {
+        if (errorDiv.parentNode) {
+          errorDiv.parentNode.removeChild(errorDiv);
+        }
+      }, 5000);
     }
   };
 
   const handleImport = async (filePath: string) => {
     await processVideoFile(filePath);
+  };
+
+  const handleClipSelect = (clipId: string) => {
+    setSelectedClipId(clipId);
+  };
+
+  const handleSeek = (time: number) => {
+    setPlayheadPosition(time);
+    // TODO: Also seek video player when PR #5 is implemented
+  };
+
+  const handleDeleteClip = (clipId: string) => {
+    setClips(prev => prev.filter(c => c.id !== clipId));
+    
+    // Clear selection if deleted clip was selected
+    if (selectedClipId === clipId) {
+      setSelectedClipId(null);
+    }
   };
 
   return (
@@ -161,10 +203,14 @@ function App() {
 
       {/* Timeline Area */}
       <div className="timeline-area">
-        <div className="timeline-placeholder">
-          <p>Timeline will appear here</p>
-          <p>Clips count: {clips.length}</p>
-        </div>
+        <Timeline
+          clips={clips}
+          playheadPosition={playheadPosition}
+          selectedClipId={selectedClipId}
+          onClipSelect={handleClipSelect}
+          onSeek={handleSeek}
+          onDeleteClip={handleDeleteClip}
+        />
       </div>
 
       {/* Controls Area */}
