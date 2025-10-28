@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { convertFileSrc } from "@tauri-apps/api/tauri";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 interface Clip {
   id: string;
@@ -13,20 +13,63 @@ interface Clip {
   outPoint: number;
 }
 
-interface VideoPlayerProps {
-  currentClip: Clip | null;
-  onTimeUpdate: (time: number) => void;
-  onDeleteClip: (clipId: string) => void;
+interface ClipAtPlayhead {
+  clip: Clip;
+  localTime: number;
 }
 
-export function VideoPlayer({ currentClip, onTimeUpdate, onDeleteClip }: VideoPlayerProps) {
+interface VideoPlayerProps {
+  clipAtPlayhead: ClipAtPlayhead | null;
+  isPlaying: boolean;
+  onPlayPause: () => void;
+  totalTimelineDuration: number;
+  playheadPosition: number;
+}
+
+export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimelineDuration, playheadPosition }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   // Convert file path to URL for video element
-  const videoUrl = currentClip ? convertFileSrc(currentClip.path) : "";
+  const videoUrl = clipAtPlayhead ? convertFileSrc(clipAtPlayhead.clip.path) : "";
+  
+  // Get proper MIME type for the video
+  const getVideoMimeType = (path: string): string => {
+    const ext = path.split('.').pop()?.toLowerCase() || '';
+    const mimeTypes: Record<string, string> = {
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'avi': 'video/x-msvideo',
+      'mkv': 'video/x-matroska',
+      'webm': 'video/webm',
+      'ogv': 'video/ogg',
+      'm4v': 'video/x-m4v',
+    };
+    return mimeTypes[ext] || `video/${ext}`;
+  };
+  
+  // Sync video playback with playhead position
+  useEffect(() => {
+    if (!videoRef.current || !clipAtPlayhead) return;
+    
+    const video = videoRef.current;
+    const targetTime = clipAtPlayhead.localTime;
+    
+    // Only seek if the difference is significant (more than 0.1 seconds)
+    if (Math.abs(video.currentTime - targetTime) > 0.1) {
+      video.currentTime = targetTime;
+    }
+    
+    // Handle play/pause state
+    if (isPlaying && video.paused) {
+      video.play().catch(err => {
+        console.error("Failed to play:", err);
+        setError(`Failed to play video: ${err.message}`);
+      });
+    } else if (!isPlaying && !video.paused) {
+      video.pause();
+    }
+  }, [clipAtPlayhead, playheadPosition, isPlaying]);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -39,18 +82,7 @@ export function VideoPlayer({ currentClip, onTimeUpdate, onDeleteClip }: VideoPl
       // Spacebar - Toggle play/pause
       if (e.code === "Space") {
         e.preventDefault(); // Prevent page scrolling
-        togglePlayPause();
-      }
-      
-      // Delete/Backspace - Remove selected clip
-      if ((e.code === "Delete" || e.code === "Backspace") && currentClip) {
-        e.preventDefault();
-        
-        // Show confirmation dialog
-        const confirmDelete = confirm("Delete this clip from timeline?");
-        if (confirmDelete) {
-          onDeleteClip(currentClip.id);
-        }
+        onPlayPause();
       }
     };
     
@@ -61,38 +93,8 @@ export function VideoPlayer({ currentClip, onTimeUpdate, onDeleteClip }: VideoPl
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [currentClip, onDeleteClip]);
+  }, [onPlayPause]);
 
-  // Handle play/pause toggle
-  const togglePlayPause = () => {
-    if (!videoRef.current || !currentClip) return;
-
-    if (videoRef.current.paused) {
-      videoRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(err => {
-          setError(`Failed to play video: ${err.message}`);
-          setIsPlaying(false);
-        });
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
-
-  // Handle time update event
-  const handleTimeUpdate = () => {
-    if (!videoRef.current || !currentClip) return;
-    
-    const videoCurrentTime = videoRef.current.currentTime;
-    setCurrentTime(videoCurrentTime);
-    
-    // Calculate absolute timeline position
-    // For single clip, this is just the current time
-    // For multiple clips, this would account for clip start offset in the timeline
-    // This will be enhanced in PR #6 with trim functionality
-    onTimeUpdate(videoCurrentTime);
-  };
 
   // Handle video errors
   const handleVideoError = () => {
@@ -124,7 +126,6 @@ export function VideoPlayer({ currentClip, onTimeUpdate, onDeleteClip }: VideoPl
     
     console.error("Video error:", errorMessage);
     setError(`Failed to load video: ${errorMessage}`);
-    setIsPlaying(false);
     
     // Auto-dismiss error after 5 seconds
     setTimeout(() => {
@@ -132,90 +133,71 @@ export function VideoPlayer({ currentClip, onTimeUpdate, onDeleteClip }: VideoPl
     }, 5000);
   };
 
-  // Handle video ended event
-  const handleVideoEnded = () => {
-    setIsPlaying(false);
-  };
-
-  // Reset video when clip changes
+  // Reset error when clip changes
   useEffect(() => {
-    if (!videoRef.current) return;
-    
-    // Reset state
-    setIsPlaying(false);
     setError(null);
-    setCurrentTime(0);
-    
-    // If there's a clip, prepare the video
-    if (currentClip) {
-      // When the video is loaded, seek to inPoint
-      const handleCanPlay = () => {
-        if (videoRef.current) {
-          // Seek to in-point (will be 0 until trim functionality is implemented)
-          videoRef.current.currentTime = currentClip.inPoint;
-          // Remove the event listener after first load
-          videoRef.current.removeEventListener('canplay', handleCanPlay);
-        }
-      };
-      
-      // Add event listener for when video can play
-      videoRef.current.addEventListener('canplay', handleCanPlay);
-      
-      // Clean up event listener if component unmounts before video loads
-      return () => {
-        if (videoRef.current) {
-          videoRef.current.removeEventListener('canplay', handleCanPlay);
-        }
-      };
-    }
-  }, [currentClip]);
+  }, [clipAtPlayhead?.clip.id]);
+
+  const hasClips = totalTimelineDuration > 0;
 
   return (
     <div className="video-player">
-      {currentClip ? (
+      {/* Video Preview - always show if there are clips on timeline */}
+      {clipAtPlayhead && (
         <>
           <video
             ref={videoRef}
-            src={videoUrl}
-            onTimeUpdate={handleTimeUpdate}
             onError={handleVideoError}
-            onEnded={handleVideoEnded}
+            onLoadedMetadata={() => console.log("Video metadata loaded successfully")}
             style={{
-              width: "100%",
-              maxHeight: "500px",
+              width: "auto",
+              height: "auto",
+              maxWidth: "100%",
+              maxHeight: "calc(100% - 120px)", // Reserve space for controls + hints
               background: "#000",
               objectFit: "contain",
             }}
-          />
+          >
+            <source src={videoUrl} type={getVideoMimeType(clipAtPlayhead.clip.path)} />
+            Your browser does not support the video tag.
+          </video>
           
           {error && (
             <div className="video-error">
               {error}
             </div>
           )}
-          
+        </>
+      )}
+      
+      {/* Show placeholder if no clips */}
+      {!hasClips && (
+        <div className="video-placeholder">
+          <p>No clips on timeline</p>
+          <p>Import videos to get started</p>
+        </div>
+      )}
+      
+      {/* Universal Controls - always visible when there are clips */}
+      {hasClips && (
+        <>
           <div className="video-controls">
             <button
-              onClick={togglePlayPause}
+              onClick={onPlayPause}
               className="play-button"
+              disabled={!hasClips}
             >
               {isPlaying ? "Pause" : "Play"}
             </button>
             <div className="time-display">
-              {currentTime.toFixed(2)}s / {currentClip.duration.toFixed(2)}s
+              {playheadPosition.toFixed(2)}s / {totalTimelineDuration.toFixed(2)}s
             </div>
           </div>
           
           <div className="keyboard-hints">
             <span>Spacebar: Play/Pause</span>
-            <span>Delete: Remove Clip</span>
           </div>
         </>
-      ) : (
-        <div className="video-placeholder">
-          <p>No clip selected</p>
-          <p>Select a clip from the timeline to preview</p>
-        </div>
       )}
     </div>
   );

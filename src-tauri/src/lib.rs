@@ -141,7 +141,21 @@ pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: Stri
         .map_err(|e| format!("Failed to execute FFprobe: {}", e))?;
     
     if !output.status.success() {
-        return Err(format!("FFprobe failed: {}", String::from_utf8_lossy(&output.stderr)));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        
+        // Parse FFprobe error to provide user-friendly message
+        if stderr.contains("moov atom not found") || stderr.contains("Invalid data found") {
+            return Err("This file is not a valid video file or is corrupted.".to_string());
+        } else if stderr.contains("No such file or directory") {
+            return Err("File not found. It may have been moved or deleted.".to_string());
+        } else if stderr.contains("Permission denied") {
+            return Err("Permission denied. Unable to access this file.".to_string());
+        } else if stderr.contains("Unsupported") || stderr.contains("not supported") {
+            return Err("This video format is not supported.".to_string());
+        } else {
+            // Generic fallback for unknown errors
+            return Err("Unable to process this video file. It may be corrupted or in an unsupported format.".to_string());
+        }
     }
     
     // Parse JSON output

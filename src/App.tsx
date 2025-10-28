@@ -24,6 +24,7 @@ function App() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [playheadPosition, setPlayheadPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Set up drag and drop event listeners
   useEffect(() => {
@@ -145,14 +146,29 @@ function App() {
       
     } catch (error) {
       console.error("Import failed:", error);
-      // Don't use alert which requires dialog permission
-      console.error(`Import failed: ${error}`);
-      // Display error in UI instead
+      
+      // Display user-friendly error in UI
       const errorDiv = document.createElement('div');
       errorDiv.className = 'error-message';
-      errorDiv.textContent = `Import failed: ${error}`;
-      errorDiv.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #d9534f; color: white; padding: 10px 20px; border-radius: 5px; z-index: 1000;';
+      errorDiv.textContent = `${error}`;
+      errorDiv.style.cssText = `
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #d9534f;
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 1000;
+        font-size: 14px;
+        max-width: 500px;
+        text-align: center;
+      `;
       document.body.appendChild(errorDiv);
+      
+      // Auto-dismiss after 5 seconds
       setTimeout(() => {
         if (errorDiv.parentNode) {
           errorDiv.parentNode.removeChild(errorDiv);
@@ -169,11 +185,61 @@ function App() {
     setSelectedClipId(clipId);
   };
 
+  // Calculate total timeline duration
+  const totalTimelineDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
+
+  // Timeline playback loop
+  useEffect(() => {
+    if (!isPlaying) return;
+    
+    const interval = setInterval(() => {
+      setPlayheadPosition(prev => {
+        const next = prev + 0.033; // ~30fps updates
+        
+        // Stop at end of timeline
+        if (next >= totalTimelineDuration) {
+          setIsPlaying(false);
+          return totalTimelineDuration;
+        }
+        
+        return next;
+      });
+    }, 33); // ~30fps
+    
+    return () => clearInterval(interval);
+  }, [isPlaying, totalTimelineDuration]);
+
+  // Get the clip and local time at current playhead position
+  const getClipAtPlayhead = (position: number): { clip: Clip; localTime: number } | null => {
+    let accumulatedTime = 0;
+    
+    for (const clip of clips) {
+      const clipDuration = clip.duration;
+      if (position >= accumulatedTime && position < accumulatedTime + clipDuration) {
+        return {
+          clip,
+          localTime: position - accumulatedTime
+        };
+      }
+      accumulatedTime += clipDuration;
+    }
+    
+    return null;
+  };
+
   const handleSeek = (time: number) => {
     setPlayheadPosition(time);
+  };
+
+  const handlePlayPause = () => {
+    if (clips.length === 0) return;
     
-    // Note: The video player will automatically sync with the timeline
-    // through the currentTime property when it receives time updates
+    // If at the end, restart from beginning
+    if (playheadPosition >= totalTimelineDuration) {
+      setPlayheadPosition(0);
+    }
+    
+    setIsPlaying(!isPlaying);
   };
 
   const handleDeleteClip = (clipId: string) => {
@@ -198,9 +264,11 @@ function App() {
       <div className="video-player-area">
         {isDragging && <div className="drag-overlay">Drop videos here to import</div>}
         <VideoPlayer 
-          currentClip={clips.find(clip => clip.id === selectedClipId) || null}
-          onTimeUpdate={handleSeek}
-          onDeleteClip={handleDeleteClip}
+          clipAtPlayhead={getClipAtPlayhead(playheadPosition)}
+          isPlaying={isPlaying}
+          onPlayPause={handlePlayPause}
+          totalTimelineDuration={totalTimelineDuration}
+          playheadPosition={playheadPosition}
         />
       </div>
 

@@ -18,10 +18,16 @@ body {
 }
 
 .app {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr 200px 80px;
+  grid-template-areas:
+    "header"
+    "preview"
+    "timeline"
+    "controls";
   height: 100vh;
   width: 100vw;
+  overflow: hidden;
 }
 
 /* Drag and Drop Styles */
@@ -49,12 +55,14 @@ body {
 
 /* Header Styles */
 header {
+  grid-area: header;
   background: #2a2a2a;
   padding: 15px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #444;
+  z-index: 10;
 }
 
 header h1 {
@@ -92,13 +100,15 @@ header h1 {
 
 /* Video Player Area */
 .video-player-area {
-  flex: 1;
+  grid-area: preview;
   background: #1e1e1e;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 400px;
   position: relative;
+  overflow: hidden; /* No scrolling - everything must fit */
+  padding: 10px;
 }
 
 .video-placeholder {
@@ -122,6 +132,8 @@ header h1 {
   align-items: center;
   justify-content: center;
   position: relative;
+  gap: 10px;
+  max-height: 100%; /* Ensure it never exceeds container */
 }
 
 .video-controls {
@@ -130,9 +142,11 @@ header h1 {
   justify-content: space-between;
   width: 100%;
   max-width: 800px;
-  padding: 15px;
+  padding: 10px 15px;
   background: #2a2a2a;
-  border-radius: 0 0 5px 5px;
+  border-radius: 5px;
+  flex-shrink: 0; /* Never shrink */
+  min-height: 50px;
 }
 
 .play-button {
@@ -171,24 +185,25 @@ header h1 {
 }
 
 .keyboard-hints {
-  margin-top: 10px;
   display: flex;
   gap: 20px;
   justify-content: center;
   color: #888;
-  font-size: 12px;
+  font-size: 11px;
+  flex-shrink: 0; /* Never shrink */
+  min-height: 30px;
 }
 
 .keyboard-hints span {
-  padding: 5px 10px;
+  padding: 4px 8px;
   background: #2a2a2a;
   border-radius: 3px;
 }
 
 /* Timeline Area */
 .timeline-area {
+  grid-area: timeline;
   background: #2a2a2a;
-  height: 150px;
   border-top: 2px solid #444;
   display: flex;
   align-items: center;
@@ -351,9 +366,14 @@ header h1 {
 
 /* Controls Area */
 .controls-area {
+  grid-area: controls;
   background: #2a2a2a;
   padding: 20px;
   border-top: 1px solid #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 /* Placeholder Styles */

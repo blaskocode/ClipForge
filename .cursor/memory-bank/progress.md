@@ -3,14 +3,18 @@
 ## What Works (Current State)
 
 ### PR #5 Video Player Component ✅
-- HTML5 video player with proper path conversion
-- Play/pause controls with state management
-- Current time and duration display
-- Keyboard shortcuts (Spacebar, Delete)
-- Playhead synchronization with timeline
-- Comprehensive error handling for video loading
-- Clip switching with smooth transitions
-- Visual keyboard shortcut hints
+- HTML5 video player with proper path conversion (Tauri v2 `convertFileSrc`)
+- **Universal timeline playback** - Play controls work across all clips
+- **Professional UX** - Preview always shows playhead position, independent of clip selection
+- Continuous multi-clip playback with automatic transitions
+- Current time and duration display (timeline position / total duration)
+- Keyboard shortcuts (Spacebar for play/pause)
+- Smooth playhead synchronization with ~30fps updates
+- **User-friendly error handling** - FFprobe errors translated to readable messages
+- MIME type mapping for proper video format support (.mov → video/quicktime)
+- Responsive layout using CSS Grid - video scales to fit, controls always visible
+- Comprehensive error handling for corrupted/invalid video files
+- All 7 manual tests passed ✅
 
 ### PR #4 Timeline Component ✅
 - Timeline visualization with time ruler
@@ -289,21 +293,40 @@ test result: ok. 3 passed; 0 failed; 0 ignored
 - PR4-COMPLETE.md: Summary of completed work
 
 ## PR #5 Summary
-**Status**: ✅ Complete & Tested
-**Time**: ~3 hours
+**Status**: ✅ Complete & Tested - All 7 Tests Passed
+**Time**: ~5 hours (including major architecture refactoring)
 **Key Deliverables**:
 - VideoPlayer component with HTML5 video element
-- Play/pause controls with state management
-- Current time and duration display
-- Keyboard shortcuts (Spacebar for play/pause, Delete for clip removal)
-- Playhead synchronization with timeline
-- Comprehensive error handling for video loading failures
-- Clip switching with smooth transitions
+- **Universal timeline playback system** - Refactored from clip-specific to timeline-wide controls
+- **Professional UX architecture** - Preview follows playhead, independent of clip selection
+- Continuous multi-clip playback with automatic transitions at ~30fps
+- Timeline position and total duration display  
+- Keyboard shortcuts (Spacebar for play/pause)
+- Smooth playhead synchronization with video playback
+- User-friendly error messages (FFprobe errors translated to readable text)
+- MIME type mapping for proper video format support (.mov → video/quicktime, etc.)
+- Responsive CSS Grid layout - video scales to fit, controls always visible
+- Proper Tauri v2 integration (`convertFileSrc` from `@tauri-apps/api/core`)
 - Visual keyboard shortcut hints
 - No linter errors or warnings
 
+**Major Issues Resolved**:
+1. Tauri v2 import path (`@tauri-apps/api/core` not `/tauri`)
+2. Layout overlap (CSS Grid redesign)
+3. MIME type errors for .mov files
+4. Technical FFprobe errors (now user-friendly)
+5. Architecture refactoring (clip-specific → universal timeline playback)
+
 **Testing Documentation**:
-- PR5-TESTING-INSTRUCTIONS.md: Detailed test procedures
-- PR5-VERIFICATION.md: Implementation verification
+- PR5-TESTING-INSTRUCTIONS.md: All 7 test categories completed and verified ✅
 - PR5-COMPLETE.md: Summary of completed work
+
+**Test Results**: 7/7 Passed ✅
+1. Basic Loading Test ✅
+2. Play/Pause Controls Test ✅  
+3. Time Display Test ✅
+4. Keyboard Shortcuts Test ✅
+5. Playhead Synchronization Test ✅
+6. Error Handling Test ✅
+7. Clip Switching Test ✅
 

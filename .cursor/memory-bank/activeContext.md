@@ -70,13 +70,18 @@
 
 ### Recent Accomplishments (PR #5)
 1. ✅ Created VideoPlayer component with HTML5 video element
-2. ✅ Implemented play/pause controls with state management
-3. ✅ Added keyboard shortcuts (Spacebar for play/pause, Delete for clip removal)
-4. ✅ Implemented playhead synchronization with video playback
-5. ✅ Added error handling for video loading failures
-6. ✅ Implemented clip switching when selection changes
-7. ✅ Added current time and duration display
-8. ✅ Created comprehensive testing instructions and verification docs
+2. ✅ **Major Architecture Refactoring** - Converted from clip-specific to universal timeline playback
+3. ✅ Implemented universal play/pause controls that work across all clips
+4. ✅ **Professional UX** - Preview always shows playhead position, independent of clip selection
+5. ✅ Added continuous multi-clip playback with automatic transitions (~30fps)
+6. ✅ Added keyboard shortcuts (Spacebar for play/pause)
+7. ✅ Implemented smooth playhead synchronization with video playback
+8. ✅ **User-friendly error handling** - Translated FFprobe errors to readable messages
+9. ✅ Fixed MIME type mapping for .mov files (video/quicktime)
+10. ✅ Redesigned layout using CSS Grid - video scales to fit, controls always visible
+11. ✅ Fixed Tauri v2 import path (`@tauri-apps/api/core` not `/tauri`)
+12. ✅ All 7 manual tests passed successfully
+13. ✅ Created comprehensive testing instructions and documentation
 
 ### Immediate Next Steps (PR #6)
 1. Create TrimControls component with in/out point inputs
@@ -116,16 +121,17 @@
 10. Set up git (after working code exists)
 
 ## Recent Changes (Last Session)
-- Created VideoPlayer component with HTML5 video element
-- Implemented play/pause controls and time display
-- Added keyboard shortcuts for play/pause and clip deletion
-- Implemented playhead synchronization with video playback
-- Added comprehensive error handling for video loading failures
-- Implemented clip switching with proper state management
-- Created PR5-TESTING-INSTRUCTIONS.md with detailed test procedures
-- Created PR5-VERIFICATION.md documenting the implementation
-- Created PR5-COMPLETE.md to reflect the completed state
-- All manual tests passed successfully (8/8)
+- **Major Architecture Refactoring**: Converted video player from clip-specific to universal timeline playback
+- Created `getClipAtPlayhead()` function in App.tsx to determine which clip shows at any timeline position
+- Implemented ~30fps playback loop that advances playhead continuously across all clips
+- Refactored VideoPlayer to receive `clipAtPlayhead` prop instead of `currentClip`
+- Play controls now work across entire timeline, not tied to individual clips
+- Preview always shows playhead position, completely independent of clip selection
+- Fixed Tauri v2 import path for `convertFileSrc` (`@tauri-apps/api/core`)
+- Added MIME type mapping for proper video format support (.mov → video/quicktime)
+- Improved error handling: FFprobe errors now translated to user-friendly messages
+- Redesigned layout using CSS Grid to prevent control overlap
+- All 7 manual tests passed successfully ✅
 - Updated memory bank to reflect PR #5 completed state
 - Ready to proceed with PR #6: Trim Functionality
 

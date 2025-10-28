@@ -1,0 +1,81 @@
+Description: Enforce a 500-line maximum limit for all source files to maintain code quality and readability
+Globs: **/*.{ts,tsx,js,jsx,rs,css}
+
+# File Length Limit Rule
+
+## Maximum File Length
+**HARD LIMIT: 500 lines per file**
+
+Any file that exceeds 500 lines MUST be refactored into multiple smaller files.
+
+## When a File Exceeds 500 Lines
+
+### Analysis Required
+1. Identify logical groupings within the file
+2. Look for natural boundaries (components, functions, types, utilities)
+3. Determine the best way to split the file
+
+### Refactoring Strategies
+
+#### For React Components (TypeScript/JavaScript)
+- **Large Components**: Split into smaller sub-components
+- **Multiple Components**: Move each component to its own file
+- **Types/Interfaces**: Extract to a `types.ts` file in the same directory
+- **Utility Functions**: Move to a `utils/` subdirectory
+- **Constants**: Extract to a `constants.ts` file
+- **Hooks**: Move custom hooks to separate files (e.g., `useVideoPlayer.ts`)
+
+Example structure:
+```
+src/components/VideoPlayer/
+  ├── VideoPlayer.tsx          (main component, <200 lines)
+  ├── PlaybackControls.tsx     (sub-component)
+  ├── TimeDisplay.tsx          (sub-component)
+  ├── types.ts                 (interfaces)
+  └── utils.ts                 (helper functions)
+```
+
+#### For Rust Files
+- **Multiple Structs**: Move each struct to its own module
+- **Long Implementations**: Split into multiple trait implementations
+- **Helper Functions**: Extract to a `helpers` module
+- **Tests**: Keep tests in the same file, but if tests alone exceed limits, move to `tests/` directory
+
+Example structure:
+```
+src/
+  ├── lib.rs                   (main, <200 lines)
+  ├── commands/
+  │   ├── mod.rs
+  │   ├── validate.rs
+  │   ├── metadata.rs
+  │   └── export.rs
+  └── types.rs
+```
+
+#### For CSS Files
+- **Component Styles**: Each component should have its own CSS file
+- **Global Styles**: Split into logical files (typography.css, layout.css, colors.css)
+- **Utility Classes**: Extract to utilities.css
+
+### After Refactoring
+1. Update all import statements in files that reference the split code
+2. Test that all functionality still works
+3. Verify no broken imports or missing references
+4. Update documentation if needed
+
+## Prevention
+- Regularly check file length when adding new code
+- If a file is approaching 400 lines, proactively refactor
+- Use the principle: "One file, one responsibility"
+
+## Checking File Length
+When editing a file, if you notice it's over 400 lines, suggest refactoring in the next available opportunity.
+
+## Exceptions
+The following files may exceed 500 lines but should still be kept reasonable:
+- Configuration files (package.json, tsconfig.json, etc.)
+- Auto-generated files
+- Test data files
+
+**No exceptions for source code files** - all must be under 500 lines.

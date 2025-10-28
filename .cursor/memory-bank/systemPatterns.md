@@ -50,9 +50,11 @@ interface Clip {
 }
 ```
 
-### 4. File Path Conversion (Tauri)
+### 4. File Path Conversion (Tauri v2)
 Local file paths must be converted to URLs for HTML5 video:
 ```typescript
+import { convertFileSrc } from "@tauri-apps/api/core"; // ⚠️ Tauri v2: use /core NOT /tauri
+
 const videoUrl = convertFileSrc(clip.path);
 // Converts: /Users/path/video.mp4 → http://asset.localhost/Users/path/video.mp4
 ```

@@ -10,11 +10,19 @@
 - **Tauri API**: @tauri-apps/api v2
 
 ### Backend
-- **Framework**: Tauri 2.0
+- **Framework**: Tauri 2.0 ⚠️ **IMPORTANT: We are using Tauri v2, NOT v1**
 - **Language**: Rust (latest stable)
 - **Video Processing**: FFmpeg/FFprobe (bundled binaries)
 - **IPC**: Tauri invoke/listen system
 - **File Dialogs**: Built-in Tauri dialogs
+
+### Critical Tauri v2 Changes
+- **Imports**: Use `@tauri-apps/api/core` NOT `@tauri-apps/api/tauri`
+  - `convertFileSrc` is in `@tauri-apps/api/core`
+  - `invoke` is in `@tauri-apps/api/core`
+- **File Drop**: No `fileDropEnabled` in config (handled via events)
+- **Dialog Plugin**: Use `tauri-plugin-dialog` with `DialogExt` trait
+- **Path Resolution**: Use `app_handle.path_resolver()` for resources
 
 ### Build & Package
 - **Package Manager**: npm

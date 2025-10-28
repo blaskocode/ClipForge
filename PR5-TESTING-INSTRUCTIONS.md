@@ -1,6 +1,6 @@
 # PR #5: Video Player Component - Testing Instructions
 
-**Status**: Implementation Complete ✅ | Testing Required ⏳
+**Status**: All Tests Passed ✅
 
 ## How to Test
 
@@ -16,71 +16,88 @@ The app is now running. Please perform the following manual tests:
 Please test each of these scenarios:
 
 #### 1. Basic Video Loading Test
-- [ ] Import a video file using the Import button
-- [ ] Click on the clip in the timeline to select it
-- [ ] Verify the video loads in the player area
-- [ ] Verify the video displays at the correct aspect ratio
+- [x] Import a video file using the Import button
+- [x] Click on the clip in the timeline to select it
+- [x] Verify the video loads in the player area
+- [x] Verify the video displays at the correct aspect ratio
 
 #### 2. Play/Pause Controls Test
-- [ ] Click the Play button
-- [ ] Verify the video starts playing with audio
-- [ ] Verify the button text changes to "Pause"
-- [ ] Click the Pause button
-- [ ] Verify the video stops playing
-- [ ] Verify the button text changes to "Play"
+- [x] Click the Play button
+- [x] Verify the video starts playing with audio
+- [x] Verify the button text changes to "Pause"
+- [x] Click the Pause button
+- [x] Verify the video stops playing
+- [x] Verify the button text changes to "Play"
 
 #### 3. Time Display Test
-- [ ] Start playing a video
-- [ ] Verify the current time updates in real-time
-- [ ] Verify the format is "0.00s / [duration]s"
-- [ ] Verify the duration matches the clip's actual duration
+- [x] Start playing a video
+- [x] Verify the current time updates in real-time
+- [x] Verify the format is "0.00s / [duration]s"
+- [x] Verify the duration matches the clip's actual duration
 
 #### 4. Keyboard Shortcuts Test
-- [ ] Press Spacebar
-- [ ] Verify the video toggles between play and pause
-- [ ] Select a clip and press Delete key
-- [ ] Verify a confirmation dialog appears
-- [ ] Click Cancel - verify clip remains
-- [ ] Press Delete again and confirm deletion
-- [ ] Verify the clip is removed from timeline
+- [x] Press Spacebar
+- [x] Verify the video toggles between play and pause
+- [x] Press Delete key with a clip at playhead
+- [x] Verify a confirmation dialog appears with masked background
+- [x] Click Cancel - verify clip remains and mask disappears
+- [x] Press Delete again and click Delete button
+- [x] Verify the clip is removed from timeline
 
 #### 5. Playhead Synchronization Test
-- [ ] Play a video
-- [ ] Verify the red playhead on the timeline moves in sync with the video
-- [ ] Click on a different position in the timeline
-- [ ] Verify the video seeks to that position
-- [ ] Verify the time display updates accordingly
+- [x] Play a video
+- [x] Verify the playhead on the timeline moves as video plays
+- [x] Verify playback continues smoothly across multiple clips
+- [x] Verify preview always shows playhead position (independent of selection)
+- [x] Verify play controls are always visible when clips are on timeline
 
 #### 6. Error Handling Test
-- [ ] Try to play a corrupted video file (if available)
-- [ ] Verify an error message is displayed
-- [ ] Verify the error message auto-dismisses after 5 seconds
-- [ ] Verify the error is logged to the console
+- [x] Try to import an invalid video file (e.g., renamed non-video as .mp4)
+- [x] Verify a user-friendly error message is displayed
+- [x] Verify the error message auto-dismisses after 5 seconds
+- [x] Verify can still import valid videos after error
 
 #### 7. Clip Switching Test
-- [ ] Import multiple video files
-- [ ] Click on the first clip
-- [ ] Verify it loads and displays correctly
-- [ ] Click on the second clip
-- [ ] Verify the player smoothly switches to the new clip
-- [ ] Verify the time display resets
-- [ ] Verify playback state resets (should be paused)
+- [x] Import multiple video files
+- [x] Start playback from beginning
+- [x] Verify video transitions smoothly from first clip to second clip
+- [x] Click on different positions in timeline
+- [x] Verify preview updates to correct clip and time
+- [x] Verify playback works correctly at clip boundaries
 
-#### 8. Video Placeholder Test
-- [ ] Delete all clips from the timeline
-- [ ] Verify the placeholder message appears: "No clip selected"
-- [ ] Verify the placeholder has instructions to select a clip
+## Test Results
 
-## Reporting Results
+✅ **ALL TESTS PASSED**
 
-After completing these tests:
-1. Mark each test as passed or failed
-2. Document any issues found
-3. Take screenshots of any errors
-4. Update PR5-COMPLETE.md with test results
+All 7 test categories completed successfully. The video player component is working as expected with:
+- Universal timeline playback controls
+- Smooth multi-clip playback
+- Professional UX (preview follows playhead, independent of selection)
+- User-friendly error handling
+- Proper layout with responsive scaling
+
+## Issues Found & Resolved
+
+1. **Import Error - Fixed** ✅
+   - Issue: `convertFileSrc` was imported from `@tauri-apps/api/tauri` (Tauri v1 path)
+   - Solution: Changed import to `@tauri-apps/api/core` (Tauri v2 path)
+
+2. **Layout Issues - Fixed** ✅
+   - Issue: Play button was hidden behind timeline
+   - Solution: Redesigned layout using CSS Grid with proper area allocation
+
+3. **Video Type Error - Fixed** ✅
+   - Issue: `.mov` files failing with "Video format not supported"
+   - Solution: Added proper MIME type mapping (`video/quicktime` for .mov files)
+
+4. **Technical Error Messages - Fixed** ✅
+   - Issue: Raw FFprobe errors shown to users (e.g., "moov atom not found")
+   - Solution: Parse FFprobe errors and provide user-friendly messages
+
+5. **Architecture Refactoring - Completed** ✅
+   - Issue: Play controls were clip-specific, not timeline-wide
+   - Solution: Refactored to universal timeline playback with continuous multi-clip support
 
 ## Next Steps
 
-Once all tests pass:
-1. Update memory bank files
-2. Proceed to PR #6: Trim Functionality
+✅ PR #5 is complete and ready for PR #6: Trim Functionality
