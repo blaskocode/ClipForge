@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ImportButton } from "./components/ImportButton";
 import { Timeline } from "./components/Timeline";
+import { VideoPlayer } from "./components/VideoPlayer";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
@@ -170,7 +171,9 @@ function App() {
 
   const handleSeek = (time: number) => {
     setPlayheadPosition(time);
-    // TODO: Also seek video player when PR #5 is implemented
+    
+    // Note: The video player will automatically sync with the timeline
+    // through the currentTime property when it receives time updates
   };
 
   const handleDeleteClip = (clipId: string) => {
@@ -193,12 +196,12 @@ function App() {
 
       {/* Video Player Area */}
       <div className="video-player-area">
-        <div className="video-placeholder">
-          <p>Video player will appear here</p>
-          <p>Selected clip: {selectedClipId || "None"}</p>
-          <p>Clips imported: {clips.length}</p>
-          {isDragging && <div className="drag-overlay">Drop videos here to import</div>}
-        </div>
+        {isDragging && <div className="drag-overlay">Drop videos here to import</div>}
+        <VideoPlayer 
+          currentClip={clips.find(clip => clip.id === selectedClipId) || null}
+          onTimeUpdate={handleSeek}
+          onDeleteClip={handleDeleteClip}
+        />
       </div>
 
       {/* Timeline Area */}
