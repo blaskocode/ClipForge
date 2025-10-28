@@ -21,20 +21,22 @@ export function ImportButton({ onImport }: ImportButtonProps) {
         console.log("No file path returned, file selection cancelled");
       }
     } catch (error) {
-      console.error("Import failed:", error);
-      // Don't use alert which requires dialog permission
-      console.error(`Import failed: ${error}`);
-      // Display error in UI instead
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'error-message';
-      errorDiv.textContent = `Import failed: ${error}`;
-      errorDiv.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #d9534f; color: white; padding: 10px 20px; border-radius: 5px; z-index: 1000;';
-      document.body.appendChild(errorDiv);
-      setTimeout(() => {
-        if (errorDiv.parentNode) {
-          errorDiv.parentNode.removeChild(errorDiv);
-        }
-      }, 5000);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Don't show error if user cancelled the dialog
+      if (!errorMessage.includes("No file selected") && !errorMessage.includes("Dialog error")) {
+        console.error("Import failed:", error);
+        // Display error in UI instead
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.textContent = `Import failed: ${error}`;
+        errorDiv.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #d9534f; color: white; padding: 10px 20px; border-radius: 5px; z-index: 1000;';
+        document.body.appendChild(errorDiv);
+        setTimeout(() => {
+          if (errorDiv.parentNode) {
+            errorDiv.parentNode.removeChild(errorDiv);
+          }
+        }, 5000);
+      }
     } finally {
       setIsImporting(false);
     }

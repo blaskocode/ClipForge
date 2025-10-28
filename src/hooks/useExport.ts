@@ -13,6 +13,8 @@ interface Clip {
   codec: string;
   inPoint: number;
   outPoint: number;
+  volume: number;
+  muted: boolean;
 }
 
 interface UseExportReturn {
@@ -94,8 +96,11 @@ export function useExport(clips: Clip[]): UseExportReturn {
       // Prepare clip data
       const clipData = clips.map(clip => ({
         path: clip.path,
-        in_point: clip.inPoint,
-        out_point: clip.outPoint,
+        duration: clip.duration,
+        inPoint: clip.inPoint,
+        outPoint: clip.outPoint,
+        volume: clip.volume,
+        muted: clip.muted,
       }));
       
       // Export

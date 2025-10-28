@@ -1,38 +1,75 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ImportButton } from "./components/ImportButton";
 import { Timeline } from "./components/Timeline";
 import { VideoPlayer } from "./components/VideoPlayer";
 import { TrimControls } from "./components/TrimControls";
 import { ExportButton } from "./components/ExportButton";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { KeyboardShortcutsHelp } from "./components/KeyboardShortcutsHelp";
+import { ToastContainer } from "./components/ToastContainer";
+import { UndoRedoButtons } from "./components/UndoRedoButtons";
+import { ProjectMenu } from "./components/ProjectMenu";
+import { AudioControls } from "./components/AudioControls";
+import { ZoomControls } from "./components/ZoomControls";
+import { Toast, showSuccessToast, showErrorToast, TOAST_MESSAGES } from "./utils/toastHelpers";
+import { useHistory, HistoryState } from "./hooks/useHistory";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useExport } from "./hooks/useExport";
 import { usePlaybackLoop } from "./hooks/usePlaybackLoop";
-import { openContainingFolder } from "./utils/exportHelpers";
+import { ClipAtPlayhead } from "./types";
+import { createKeyboardHandler } from "./utils/keyboardHandler";
+import { setupDragAndDrop } from "./utils/dragDrop";
+import { processVideoFile } from "./utils/videoProcessing";
+import { saveProject, loadProject, createNewProject } from "./utils/projectManagement";
+import { handleZoomIn, handleZoomOut, handleZoomToFit } from "./utils/zoomControls";
+import { handleVolumeChange, handleMuteToggle } from "./utils/audioControls";
 import "./App.css";
 
-// Temporary placeholder types - will be refined in PR #3
-interface Clip {
-  id: string;
-  path: string;
-  filename: string;
-  duration: number;
-  width: number;
-  height: number;
-  codec: string;
-  inPoint: number;
-  outPoint: number;
-}
-
 function App() {
-  const [clips, setClips] = useState<Clip[]>([]);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  // Initialize history with empty state
+  const initialState: HistoryState = {
+    clips: [],
+    selectedClipId: null,
+  };
+
+  const {
+    clips,
+    selectedClipId,
+    undo,
+    redo,
+    pushState,
+    canUndo,
+    canRedo,
+  } = useHistory(initialState);
+
+  // Playhead position is separate - not part of undo/redo history (professional behavior)
   const [playheadPosition, setPlayheadPosition] = useState(0);
+  
+  // Ref to store current playhead position for synchronous access during playback
+  const playheadPositionRef = useRef(0);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    playheadPositionRef.current = playheadPosition;
+  }, [playheadPosition]);
+
+  // Local state for UI-only concerns
   const [isDragging, setIsDragging] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  
-  // Export hook
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+
+  // Toast system
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const addToast = (toast: Toast) => {
+    setToasts(prev => [...prev, toast]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
+
+  // Export functionality
   const {
     isExporting,
     exportError,
@@ -44,345 +81,218 @@ function App() {
 
   // Set up drag and drop event listeners
   useEffect(() => {
-    const setupDragAndDrop = async () => {
-      try {
-        // Listen for file drop events
-        const unlistenDrop = await listen('tauri://file-drop', (event) => {
-          const files = event.payload as string[];
-          handleDroppedFiles(files);
-        });
-
-        // Listen for file drop hover events
-        const unlistenHover = await listen('tauri://file-drop-hover', () => {
-          setIsDragging(true);
-        });
-
-        // Listen for file drop cancelled events
-        const unlistenCancelled = await listen('tauri://file-drop-cancelled', () => {
-          setIsDragging(false);
-        });
-
-        // Cleanup function
-        return () => {
-          unlistenDrop();
-          unlistenHover();
-          unlistenCancelled();
-        };
-      } catch (error) {
-        console.error("Failed to set up drag and drop listeners:", error);
-      }
+    const dragDropHandlers = {
+      setIsDragging,
+      processVideoFile: (filePath: string) => processVideoFile(filePath, {
+        clips,
+        addToast,
+        showSuccessToast,
+        showErrorToast,
+        pushState,
+        selectedClipId,
+        TOAST_MESSAGES,
+      }),
+      clips,
+      addToast,
+      showErrorToast,
     };
 
-    setupDragAndDrop();
-  }, []);
-
-  const handleDroppedFiles = async (filePaths: string[]) => {
-    setIsDragging(false);
-    
-    // Filter for video files only
-    const videoFiles = filePaths.filter(path => {
-      const extension = path.split('.').pop()?.toLowerCase();
-      return ['mp4', 'mov', 'webm'].includes(extension || '');
-    });
-
-    if (videoFiles.length === 0) {
-      alert("No video files found. Please drop MP4, MOV, or WebM files.");
-      return;
+    const cleanup = setupDragAndDrop(dragDropHandlers);
+    if (cleanup) {
+      cleanup();
     }
-
-    // Check if bulk import would exceed hard limit
-    const totalAfterImport = clips.length + videoFiles.length;
-    if (totalAfterImport > 50) {
-      alert(`ERROR: Importing ${videoFiles.length} files would exceed the maximum of 50 clips. You currently have ${clips.length} clips. Please import fewer files or remove some clips first.`);
-      return;
-    }
-
-    // Process each video file
-    for (const filePath of videoFiles) {
-      await processVideoFile(filePath);
-    }
-  };
-
-  const processVideoFile = async (filePath: string) => {
-    console.log("processVideoFile called with path:", filePath);
-    try {
-      // Check clip limit - hard limit at 50 clips
-      if (clips.length >= 50) {
-        alert("ERROR: Maximum of 50 clips allowed. Please remove some clips before importing more.");
-        return;
-      }
-      
-      // Warning at 20 clips
-      if (clips.length >= 20) {
-        const shouldContinue = confirm(
-          `WARNING: You have ${clips.length} clips. Importing more than 20 clips may cause performance issues.\n\nDo you want to continue?`
-        );
-        if (!shouldContinue) return;
-      }
-
-      console.log("Validating video file...");
-      // First validate the file
-      const validationResult = await invoke<string>("validate_video_file", { filePath });
-      console.log("Validation result:", validationResult);
-      
-      if (validationResult.startsWith("WARNING")) {
-        const shouldContinue = confirm(`${validationResult}\n\nDo you want to continue?`);
-        if (!shouldContinue) return;
-      }
-
-      console.log("Getting video metadata...");
-      // Get metadata
-      const metadata = await invoke<{
-        duration: number;
-        width: number;
-        height: number;
-        codec: string;
-      }>("get_video_metadata", { filePath });
-      console.log("Metadata:", metadata);
-
-      const newClip: Clip = {
-        id: crypto.randomUUID(),
-        path: filePath,
-        filename: filePath.split('/').pop() || "Unknown",
-        duration: metadata.duration,
-        width: metadata.width,
-        height: metadata.height,
-        codec: metadata.codec,
-        inPoint: 0,
-        outPoint: metadata.duration
-      };
-      
-      console.log("New clip created:", newClip);
-      setClips(prev => {
-        console.log("Setting clips, prev length:", prev.length);
-        const updated = [...prev, newClip];
-        console.log("Updated clips length:", updated.length);
-        return updated;
-      });
-      
-    } catch (error) {
-      console.error("Import failed:", error);
-      
-      // Display user-friendly error in UI
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'error-message';
-      errorDiv.textContent = `${error}`;
-      errorDiv.style.cssText = `
-        position: fixed;
-        top: 80px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #d9534f;
-        color: white;
-        padding: 15px 25px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 1000;
-        font-size: 14px;
-        max-width: 500px;
-        text-align: center;
-      `;
-      document.body.appendChild(errorDiv);
-      
-      // Auto-dismiss after 5 seconds
-      setTimeout(() => {
-        if (errorDiv.parentNode) {
-          errorDiv.parentNode.removeChild(errorDiv);
-        }
-      }, 5000);
-    }
-  };
+  }, [clips, selectedClipId]);
 
   const handleImport = async (filePath: string) => {
-    await processVideoFile(filePath);
+    await processVideoFile(filePath, {
+      clips,
+      addToast,
+      showSuccessToast,
+      showErrorToast,
+      pushState,
+      selectedClipId,
+      TOAST_MESSAGES,
+    });
+  };
+
+  // Helper function to update selected clip with history
+  const updateSelectedClip = (clipId: string | null) => {
+    pushState({
+      clips,
+      selectedClipId: clipId,
+    });
   };
 
   const handleClipSelect = (clipId: string) => {
-    setSelectedClipId(clipId);
+    updateSelectedClip(clipId);
   };
 
   // Calculate total timeline duration using FULL clip durations
-  // Clips maintain their full visual length on timeline (professional non-destructive editing)
-  // Gray overlays show trimmed portions, but clips don't shrink
   const totalTimelineDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
+
+  // Helper function to update playhead position (NOT in history - professional behavior)
+  const updatePlayheadPosition = (newPosition: number) => {
+    setPlayheadPosition(newPosition);
+    playheadPositionRef.current = newPosition; // Keep ref in sync
+  };
 
   // Timeline playback loop with smart trim skipping
   usePlaybackLoop({
     isPlaying,
     clips,
     totalTimelineDuration,
+    playheadPosition,
     setIsPlaying,
-    setPlayheadPosition,
+    updatePlayheadPosition,
   });
 
-  // Keyboard handler for Delete/Backspace to delete selected clip
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if user is typing in an input or textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      // Delete or Backspace key - delete selected clip
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedClipId) {
-        e.preventDefault();
-        
-        // Create overlay
-        const overlay = document.createElement('div');
-        overlay.style.cssText = `
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: rgba(0, 0, 0, 0.7);
-          z-index: 999;
-        `;
-        
-        // Create confirmation dialog
-        const confirmDialog = document.createElement('div');
-        confirmDialog.style.cssText = `
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          background: #333;
-          border: 1px solid #555;
-          border-radius: 5px;
-          padding: 20px;
-          z-index: 1000;
-          box-shadow: 0 0 10px rgba(0,0,0,0.5);
-          text-align: center;
-        `;
-        
-        // Add message
-        const message = document.createElement('p');
-        message.textContent = 'Delete this clip from timeline?';
-        message.style.marginBottom = '20px';
-        confirmDialog.appendChild(message);
-        
-        // Add buttons container
-        const buttonsContainer = document.createElement('div');
-        buttonsContainer.style.display = 'flex';
-        buttonsContainer.style.justifyContent = 'center';
-        buttonsContainer.style.gap = '10px';
-        
-        // Add confirm button
-        const confirmButton = document.createElement('button');
-        confirmButton.textContent = 'Delete';
-        confirmButton.style.cssText = `
-          padding: 8px 16px;
-          background: #d9534f;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-        `;
-        confirmButton.onclick = () => {
-          document.body.removeChild(overlay);
-          document.body.removeChild(confirmDialog);
-          handleDeleteClip(selectedClipId);
-        };
-        
-        // Add cancel button
-        const cancelButton = document.createElement('button');
-        cancelButton.textContent = 'Cancel';
-        cancelButton.style.cssText = `
-          padding: 8px 16px;
-          background: #666;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-        `;
-        cancelButton.onclick = () => {
-          document.body.removeChild(overlay);
-          document.body.removeChild(confirmDialog);
-        };
-        
-        buttonsContainer.appendChild(confirmButton);
-        buttonsContainer.appendChild(cancelButton);
-        confirmDialog.appendChild(buttonsContainer);
-        
-        document.body.appendChild(overlay);
-        document.body.appendChild(confirmDialog);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedClipId, clips]);
-
-  // Get the clip and local time at current playhead position
-  // Timeline uses FULL clip durations (non-destructive editing)
-  const getClipAtPlayhead = (position: number): { clip: Clip; localTime: number } | null => {
+  // Utility function to find which clip the playhead is currently over
+  const getClipAtPlayhead = (position: number): ClipAtPlayhead | null => {
     let accumulatedTime = 0;
     
     for (const clip of clips) {
-      const clipDuration = clip.duration; // Use full duration
-      if (position >= accumulatedTime && position < accumulatedTime + clipDuration) {
-        // Map timeline position to video time (simple 1:1 mapping)
-        const localTime = position - accumulatedTime;
-        
-        return {
-          clip,
-          localTime: localTime
-        };
+      const clipStart = accumulatedTime;
+      const clipEnd = accumulatedTime + clip.duration;
+      
+      if (position >= clipStart && position < clipEnd) {
+        const localTime = position - clipStart;
+        return { clip, localTime };
       }
-      accumulatedTime += clipDuration;
+      
+      accumulatedTime += clip.duration;
     }
     
     return null;
   };
 
-  const handleSeek = (time: number) => {
-    setPlayheadPosition(time);
+  // Helper functions for trim point setting
+  const handleSetInPoint = () => {
+    const currentPlayheadPosition = playheadPositionRef.current;
+    const clipAtPlayhead = getClipAtPlayhead(currentPlayheadPosition);
+    if (clipAtPlayhead) {
+      handleTrimChange(clipAtPlayhead.clip.id, clipAtPlayhead.localTime, clipAtPlayhead.clip.outPoint);
+    }
+  };
+
+  const handleSetOutPoint = () => {
+    const currentPlayheadPosition = playheadPositionRef.current;
+    const clipAtPlayhead = getClipAtPlayhead(currentPlayheadPosition);
+    if (clipAtPlayhead) {
+      handleTrimChange(clipAtPlayhead.clip.id, clipAtPlayhead.clip.inPoint, clipAtPlayhead.localTime);
+      setIsPlaying(false); // Stop playback when Out Point is set
+    }
   };
 
   const handlePlayPause = () => {
-    if (clips.length === 0) return;
-    
-    // If at the end, restart from beginning
-    if (playheadPosition >= totalTimelineDuration) {
-      setPlayheadPosition(0);
-    }
-    
     setIsPlaying(!isPlaying);
   };
 
   const handleDeleteClip = (clipId: string) => {
-    setClips(prev => prev.filter(c => c.id !== clipId));
+    const newClips = clips.filter(c => c.id !== clipId);
+    const newSelectedClipId = selectedClipId === clipId ? null : selectedClipId;
     
-    // Clear selection if deleted clip was selected
-    if (selectedClipId === clipId) {
-      setSelectedClipId(null);
-    }
+    pushState({
+      clips: newClips,
+      selectedClipId: newSelectedClipId,
+    });
+    
+    addToast(showSuccessToast(TOAST_MESSAGES.CLIP_DELETED));
   };
 
   const handleTrimChange = (clipId: string, inPoint: number, outPoint: number) => {
-    // Non-destructive editing: clips maintain full timeline length
-    // Trim points are just metadata - playhead doesn't move
-    setClips(prev => prev.map(clip => 
+    const newClips = clips.map(clip => 
       clip.id === clipId 
         ? { ...clip, inPoint, outPoint }
         : clip
-    ));
-    // Playhead stays exactly where it is - no timeline position changes
+    );
+    
+    pushState({
+      clips: newClips,
+      selectedClipId,
+    });
   };
 
   // Open folder containing exported file
   const handleOpenFolder = async (filePath: string) => {
     try {
-      // Get the directory path
-      const directory = filePath.substring(0, filePath.lastIndexOf('/'));
-      console.log('Opening folder:', directory);
-      await openPath(directory);
-      console.log('Folder opened successfully');
+      await revealItemInDir(filePath);
     } catch (error) {
-      console.error('Failed to open folder:', error);
-      alert(`Failed to open folder: ${error}`);
+      console.error("Failed to open folder:", error);
     }
   };
+
+  // Project management handlers
+  const projectHandlers = {
+    clips,
+    selectedClipId,
+    playheadPosition,
+    pushState,
+    setPlayheadPosition,
+    setIsPlaying,
+    addToast,
+    showSuccessToast,
+    showErrorToast,
+    TOAST_MESSAGES,
+  };
+
+  const handleSaveProject = () => saveProject(projectHandlers);
+  const handleLoadProject = () => loadProject(projectHandlers);
+  const handleNewProject = () => createNewProject(projectHandlers);
+
+  // Zoom control handlers
+  const zoomHandlers = { zoomLevel, setZoomLevel: (level: number) => setZoomLevel(level) };
+  const handleZoomInAction = () => handleZoomIn(zoomHandlers);
+  const handleZoomOutAction = () => handleZoomOut(zoomHandlers);
+  const handleZoomToFitAction = () => handleZoomToFit(zoomHandlers);
+
+  // Audio control handlers
+  const audioHandlers = {
+    clips,
+    selectedClipId,
+    pushState,
+    addToast,
+    showSuccessToast,
+    TOAST_MESSAGES,
+  };
+
+  const handleVolumeChangeAction = (clipId: string, volume: number) => 
+    handleVolumeChange(clipId, volume, audioHandlers);
+  const handleMuteToggleAction = (clipId: string, muted: boolean) => 
+    handleMuteToggle(clipId, muted, audioHandlers);
+
+  // Keyboard handler setup
+  useEffect(() => {
+    const keyboardHandlers = {
+      handleNewProject,
+      handleExport,
+      undo,
+      redo,
+      handleSaveProject,
+      handleLoadProject,
+      handleZoomIn: handleZoomInAction,
+      handleZoomOut: handleZoomOutAction,
+      handleZoomToFit: handleZoomToFitAction,
+      setShowKeyboardHelp,
+      handlePlayPause,
+      updatePlayheadPosition,
+      playheadPosition,
+      totalTimelineDuration,
+      handleSetInPoint,
+      handleSetOutPoint,
+      handleDeleteClip,
+      selectedClipId,
+      addToast,
+      showSuccessToast,
+      TOAST_MESSAGES,
+    };
+
+    const handleKeyDown = createKeyboardHandler(keyboardHandlers);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [clips, selectedClipId, totalTimelineDuration]);
 
   return (
     <div className={`app ${isDragging ? 'dragging' : ''}`}>
@@ -390,6 +300,25 @@ function App() {
         <h1>ClipForge</h1>
         <div className="header-controls">
           <ImportButton onImport={handleImport} />
+          <UndoRedoButtons
+            onUndo={undo}
+            onRedo={redo}
+            canUndo={canUndo}
+            canRedo={canRedo}
+          />
+          <ProjectMenu
+            onSaveProject={handleSaveProject}
+            onLoadProject={handleLoadProject}
+            canSave={clips.length > 0}
+          />
+          <button 
+            onClick={handleNewProject}
+            disabled={clips.length === 0}
+            className="new-project-button"
+            title="New Project (Cmd+N)"
+          >
+            New Project
+          </button>
         </div>
       </header>
 
@@ -405,28 +334,24 @@ function App() {
         />
       </div>
 
-      {/* Timeline Area */}
-      <div className="timeline-area">
-        <Timeline
-          clips={clips}
-          playheadPosition={playheadPosition}
-          selectedClipId={selectedClipId}
-          onClipSelect={handleClipSelect}
-          onClipDeselect={() => setSelectedClipId(null)}
-          onSeek={handleSeek}
-          onDeleteClip={handleDeleteClip}
-          onTrimChange={handleTrimChange}
-        />
-      </div>
-
       {/* Controls Area */}
       <div className="controls-area">
+        <AudioControls
+          selectedClip={clips.find(c => c.id === selectedClipId) || null}
+          onVolumeChange={handleVolumeChangeAction}
+          onMuteToggle={handleMuteToggleAction}
+        />
         <TrimControls
           selectedClip={clips.find(c => c.id === selectedClipId) || null}
-          playheadPosition={playheadPosition}
           onTrimChange={handleTrimChange}
-          clips={clips}
-          clipAtPlayhead={getClipAtPlayhead(playheadPosition)}
+          onSetInPoint={handleSetInPoint}
+          onSetOutPoint={handleSetOutPoint}
+        />
+        <ZoomControls
+          zoomLevel={zoomLevel}
+          onZoomChange={(level: number) => setZoomLevel(level)}
+          onZoomToFit={handleZoomToFitAction}
+          totalDuration={totalTimelineDuration}
         />
         <ExportButton
           clips={clips}
@@ -437,43 +362,65 @@ function App() {
 
       {/* Export Success Banner */}
       {exportSuccess && (
-        <div className="export-success">
-          <div className="success-header">
-            <strong>Export Successful!</strong>
-            <button onClick={clearExportSuccess}>×</button>
-          </div>
-          <div className="success-message">
-            Video saved to:
-            <div className="success-path">{exportSuccess}</div>
-          </div>
-          <div className="success-actions">
-            <button onClick={() => handleOpenFolder(exportSuccess)} className="open-folder-button">
+        <div className="export-success-banner">
+          <div className="export-success-content">
+            <span>✅ Export completed successfully!</span>
+            <button 
+              onClick={() => handleOpenFolder(exportSuccess)}
+              className="open-folder-button"
+            >
               Open Folder
             </button>
-            <button onClick={clearExportSuccess} className="dismiss-button">
-              Dismiss
+            <button 
+              onClick={clearExportSuccess}
+              className="close-banner-button"
+            >
+              ✕
             </button>
           </div>
         </div>
       )}
 
-      {/* Export Error Display */}
+      {/* Export Error Banner */}
       {exportError && (
-        <div className="export-error">
-          <div className="error-header">
-            <strong>Export Failed</strong>
-            <button onClick={clearExportError}>×</button>
+        <div className="export-error-banner">
+          <div className="export-error-content">
+            <span>❌ Export failed: {exportError}</span>
+            <button 
+              onClick={clearExportError}
+              className="close-banner-button"
+            >
+              ✕
+            </button>
           </div>
-          <div className="error-message">
-            {exportError.split('\n').map((line, i) => (
-              <div key={i}>{line}</div>
-            ))}
-          </div>
-          <button onClick={handleExport} className="retry-button">
-            Retry Export
-          </button>
         </div>
       )}
+
+      {/* Timeline Area */}
+      <div className="timeline-area">
+        <Timeline
+          clips={clips}
+          playheadPosition={playheadPosition}
+          selectedClipId={selectedClipId}
+          onClipSelect={handleClipSelect}
+          onClipDeselect={() => updateSelectedClip(null)}
+          onSeek={updatePlayheadPosition}
+          onDeleteClip={handleDeleteClip}
+          onTrimChange={handleTrimChange}
+          zoomLevel={zoomLevel}
+        />
+      </div>
+
+      {/* Keyboard Shortcuts Help Modal */}
+      {showKeyboardHelp && (
+        <KeyboardShortcutsHelp 
+          isOpen={showKeyboardHelp}
+          onClose={() => setShowKeyboardHelp(false)} 
+        />
+      )}
+
+      {/* Toast Container */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }

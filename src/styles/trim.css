@@ -1,21 +1,45 @@
-/* Trim Controls Styles */
+/* Trim Controls Styles - Vertical Layout for Sidebar */
 .trim-controls {
   display: flex;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
+  gap: 16px;
   width: 100%;
-  justify-content: center;
+  padding: 16px;
+  background: #2a2a2a;
+  border-radius: 8px;
+}
+
+.trim-controls-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #444;
+}
+
+.trim-controls-header h3 {
+  margin: 0;
+  color: #4a90e2;
+  font-size: 16px;
+}
+
+.trim-controls-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .trim-input-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 .trim-input-group label {
   font-size: 12px;
   color: #aaa;
+  font-weight: 500;
 }
 
 .trim-input {
@@ -24,8 +48,9 @@
   border: 1px solid #555;
   border-radius: 4px;
   color: white;
-  width: 120px;
+  width: 100%;
   font-size: 14px;
+  box-sizing: border-box;
 }
 
 .trim-input:focus {
@@ -43,7 +68,7 @@
 }
 
 .trim-button {
-  padding: 8px 16px;
+  padding: 8px 12px;
   background: #4a90e2;
   color: white;
   border: none;
@@ -51,6 +76,7 @@
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s;
+  width: 100%;
 }
 
 .trim-button:hover:not(:disabled) {
@@ -64,8 +90,11 @@
 
 .trim-range-display {
   color: #aaa;
-  font-size: 13px;
-  min-width: 200px;
+  font-size: 12px;
+  text-align: center;
+  padding: 8px;
+  background: #1e1e1e;
+  border-radius: 4px;
 }
 
 .trim-range-display div {
@@ -73,7 +102,7 @@
 }
 
 .trim-reset-button {
-  padding: 8px 16px;
+  padding: 8px 12px;
   background: #666;
   color: white;
   border: none;
@@ -81,6 +110,7 @@
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s;
+  width: 100%;
 }
 
 .trim-reset-button:hover:not(:disabled) {
@@ -94,10 +124,11 @@
 
 .trim-controls .keyboard-hints {
   display: flex;
-  gap: 15px;
+  justify-content: center;
+  gap: 8px;
   color: #888;
   font-size: 11px;
-  margin-left: auto;
+  margin-top: 8px;
 }
 
 .trim-controls .keyboard-hints span {

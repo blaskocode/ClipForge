@@ -1,4 +1,8 @@
 /* ClipForge Base Styles */
+@import './styles/header-modals.css';
+@import './styles/controls.css';
+@import './styles/video-player.css';
+@import './styles/timeline.css';
 @import './styles/trim.css';
 @import './styles/export.css';
 
@@ -20,370 +24,35 @@ body {
 }
 
 .app {
-  display: grid;
-  grid-template-rows: auto 1fr 200px 80px;
-  grid-template-areas:
-    "header"
-    "preview"
-    "timeline"
-    "controls";
   height: 100vh;
-  width: 100vw;
-  overflow: hidden;
+  display: grid;
+  grid-template-areas:
+    "header header"
+    "preview controls"
+    "timeline timeline";
+  grid-template-rows: 60px 1fr 200px;
+  grid-template-columns: 1fr 350px;
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+.app.dragging {
+  background: #2a2a2a;
 }
 
 /* Drag and Drop Styles */
-.app.dragging {
-  border: 3px dashed #4a90e2;
-  background-color: rgba(74, 144, 226, 0.1);
-}
-
 .drag-overlay {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
   font-size: 24px;
-  font-weight: bold;
-  z-index: 100;
-  border: 3px dashed #4a90e2;
-}
-
-/* Header Styles */
-header {
-  grid-area: header;
-  background: #2a2a2a;
-  padding: 15px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #444;
-  z-index: 10;
-}
-
-header h1 {
-  font-size: 24px;
-  font-weight: 600;
   color: #4a90e2;
-}
-
-.header-controls {
-  display: flex;
-  gap: 10px;
-}
-
-.import-button {
-  padding: 10px 20px;
-  background: #4a90e2;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.import-button:hover:not(:disabled) {
-  background: #5aa0f2;
-}
-
-.import-button:disabled {
-  background: #666;
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-/* Video Player Area */
-.video-player-area {
-  grid-area: preview;
-  background: #1e1e1e;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden; /* No scrolling - everything must fit */
-  padding: 10px;
-}
-
-.video-placeholder {
-  text-align: center;
-  color: #666;
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Video Player Component */
-.video-player {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  gap: 10px;
-  max-height: 100%; /* Ensure it never exceeds container */
-}
-
-.video-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  max-width: 800px;
-  padding: 10px 15px;
-  background: #2a2a2a;
-  border-radius: 5px;
-  flex-shrink: 0; /* Never shrink */
-  min-height: 50px;
-}
-
-.play-button {
-  padding: 10px 20px;
-  background: #4a90e2;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.play-button:hover {
-  background: #5aa0f2;
-}
-
-.time-display {
-  font-size: 14px;
-  color: #e0e0e0;
-  font-family: monospace;
-}
-
-.video-error {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #d9534f;
-  color: white;
-  padding: 10px 20px;
-  border-radius: 5px;
-  font-size: 14px;
-  z-index: 100;
-}
-
-.keyboard-hints {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-  color: #888;
-  font-size: 11px;
-  flex-shrink: 0; /* Never shrink */
-  min-height: 30px;
-}
-
-.keyboard-hints span {
-  padding: 4px 8px;
-  background: #2a2a2a;
-  border-radius: 3px;
-}
-
-/* Timeline Area */
-.timeline-area {
-  grid-area: timeline;
-  background: #2a2a2a;
-  border-top: 2px solid #444;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.timeline-placeholder {
-  text-align: center;
-  color: #666;
-}
-
-/* Timeline Container */
-.timeline-container {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  overflow-x: auto;
-  overflow-y: hidden;
-  background: #2a2a2a;
-}
-
-/* Time Ruler */
-.time-ruler {
-  height: 30px;
-  position: relative;
-  border-bottom: 1px solid #444;
-  background: #2a2a2a;
-}
-
-.time-marker {
-  position: absolute;
-  height: 100%;
-}
-
-.time-label {
-  position: absolute;
-  top: 4px;
-  left: 2px;
-  font-size: 11px;
-  color: #888;
-  font-weight: 500;
-}
-
-.marker-line {
-  position: absolute;
-  bottom: 0;
-  width: 1px;
-  height: 8px;
-  background: #666;
-}
-
-/* Timeline */
-.timeline {
-  position: relative;
-  height: calc(100% - 30px);
-  min-width: 100%;
-  cursor: pointer;
-  background: #2a2a2a;
-}
-
-/* Empty State */
-.timeline-empty-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #666;
-  font-size: 14px;
-  text-align: center;
-  padding: 20px;
-}
-
-/* Clips */
-.clip {
-  position: absolute;
-  height: 80px;
-  top: 10px;
-  background: #3a7bc8;
-  border: 2px solid #fff;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  cursor: pointer;
-  overflow: hidden;
-  transition: all 0.2s;
-  min-width: 50px;
-}
-
-.clip:hover {
-  background: #4a8bd8;
-  transform: translateY(-2px);
-}
-
-.clip.selected {
-  background: #4a90e2;
-  border-color: #fff;
-  box-shadow: 0 0 10px rgba(74, 144, 226, 0.5);
-}
-
-.clip-name {
-  font-size: 12px;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-  padding: 0 30px;
-}
-
-/* Delete Button */
-.clip-delete-button {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 20px;
-  height: 20px;
-  background: #d9534f;
-  color: white;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 5;
-  transition: background 0.2s;
-}
-
-.clip-delete-button:hover {
-  background: #e0534f;
-}
-
-/* Playhead */
-.playhead {
-  position: absolute;
-  width: 2px;
-  height: 100%;
-  background: #f00;
-  top: 0;
+  z-index: 1000;
   pointer-events: none;
-  z-index: 10;
 }
-
-.playhead::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -6px;
-  width: 14px;
-  height: 14px;
-  background: #f00;
-  border-radius: 50%;
-  border: 2px solid #fff;
-}
-
-/* Controls Area */
-.controls-area {
-  grid-area: controls;
-  background: #2a2a2a;
-  padding: 20px;
-  border-top: 1px solid #444;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-/* Placeholder Styles */
-.video-placeholder p,
-.timeline-placeholder p,
-.controls-area p {
-  margin: 10px 0;
-  font-size: 14px;
-}
-
-/* Styles for trim and export are imported at the top of this file */

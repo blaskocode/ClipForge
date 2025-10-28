@@ -4,7 +4,12 @@
 use std::path::Path;
 use std::fs;
 use serde::{Deserialize, Serialize};
-// Removed unused import
+
+mod thumbnails;
+mod export;
+
+use thumbnails::extract_thumbnails;
+use export::export_video;
 
 #[tauri::command]
 async fn validate_video_file(file_path: String) -> Result<String, String> {
@@ -48,35 +53,132 @@ pub async fn validate_video_file_internal(file_path: String) -> Result<String, S
         .unwrap_or("")
         .to_lowercase();
     
-    if !matches!(extension.as_str(), "mp4" | "mov" | "webm") {
+    let supported_extensions = ["mp4", "mov", "webm", "avi", "mkv", "m4v", "3gp", "flv", "wmv"];
+    
+    if !supported_extensions.contains(&extension.as_str()) {
         return Err(format!(
-            "Unsupported format: .{}. Please use MP4, MOV, or WebM.",
+            "Unsupported format: .{}. Supported formats: MP4, MOV, WebM, AVI, MKV, M4V, 3GP, FLV, WMV",
             extension
         ));
     }
     
-    Ok("Valid".to_string())
+    Ok("File is valid".to_string())
 }
 
 #[tauri::command]
 async fn select_video_file(app: tauri::AppHandle) -> Result<String, String> {
     use tauri_plugin_dialog::DialogExt;
+    use tokio::sync::oneshot;
     
-    // Use a channel to get the result from the callback
-    let (tx, rx) = tokio::sync::oneshot::channel();
+    let (tx, rx) = oneshot::channel();
     
-    app.dialog()
-        .file()
-        .add_filter("Video Files", &["mp4", "mov", "webm"])
-        .pick_file(move |file_path| {
-            let _ = tx.send(file_path);
-        });
+    let dialog = app.dialog();
+    let file_dialog = dialog.file()
+        .add_filter("Video Files", &["mp4", "mov", "webm", "avi", "mkv", "m4v", "3gp", "flv", "wmv"]);
+    
+    file_dialog.pick_file(move |file_path| {
+        let _ = tx.send(file_path);
+    });
     
     // Wait for the result asynchronously
     match rx.await {
         Ok(Some(path)) => Ok(path.to_string()),
-        Ok(None) => Err("File selection cancelled".to_string()),
-        Err(_) => Err("Failed to receive file selection result".to_string()),
+        Ok(None) => Err("No file selected".to_string()),
+        Err(_) => Err("Dialog error".to_string()),
+    }
+}
+
+#[tauri::command]
+async fn select_export_path(app: tauri::AppHandle, default_filename: String) -> Result<String, String> {
+    use tauri_plugin_dialog::DialogExt;
+    use tokio::sync::oneshot;
+    
+    let (tx, rx) = oneshot::channel();
+    
+    let dialog = app.dialog();
+    let file_dialog = dialog.file()
+        .add_filter("MP4 Video", &["mp4"])
+        .set_file_name(&default_filename);
+    
+    file_dialog.save_file(move |file_path| {
+        let _ = tx.send(file_path);
+    });
+    
+    // Wait for the result asynchronously
+    match rx.await {
+        Ok(Some(path)) => Ok(path.to_string()),
+        Ok(None) => Err("No file selected".to_string()),
+        Err(_) => Err("Dialog error".to_string()),
+    }
+}
+
+#[tauri::command]
+async fn save_project(app: tauri::AppHandle, clips: Vec<serde_json::Value>, timeline_state: serde_json::Value) -> Result<String, String> {
+    use tauri_plugin_dialog::DialogExt;
+    use tokio::sync::oneshot;
+    
+    let (tx, rx) = oneshot::channel();
+    
+    let dialog = app.dialog();
+    let file_dialog = dialog.file()
+        .add_filter("ClipForge Project", &["clipforge"])
+        .set_file_name("project.clipforge");
+    
+    file_dialog.save_file(move |file_path| {
+        let _ = tx.send(file_path);
+    });
+    
+    // Wait for the result asynchronously
+    match rx.await {
+        Ok(Some(path)) => {
+            // Create project data structure
+            let project_data = serde_json::json!({
+                "clips": clips,
+                "timeline_state": timeline_state
+            });
+            
+            // Write project data to file
+            match std::fs::write(&path.to_string(), serde_json::to_string_pretty(&project_data).unwrap()) {
+                Ok(_) => Ok(path.to_string()),
+                Err(e) => Err(format!("Failed to save project: {}", e)),
+            }
+        },
+        Ok(None) => Err("No file selected".to_string()),
+        Err(_) => Err("Dialog error".to_string()),
+    }
+}
+
+#[tauri::command]
+async fn load_project(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+    use tokio::sync::oneshot;
+    
+    let (tx, rx) = oneshot::channel();
+    
+    let dialog = app.dialog();
+    let file_dialog = dialog.file()
+        .add_filter("ClipForge Project", &["clipforge"]);
+    
+    file_dialog.pick_file(move |file_path| {
+        let _ = tx.send(file_path);
+    });
+    
+    // Wait for the result asynchronously
+    match rx.await {
+        Ok(Some(path)) => {
+            // Read project data from file
+            match std::fs::read_to_string(&path.to_string()) {
+                Ok(content) => {
+                    match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(project_data) => Ok(project_data),
+                        Err(e) => Err(format!("Failed to parse project file: {}", e)),
+                    }
+                },
+                Err(e) => Err(format!("Failed to read project file: {}", e)),
+            }
+        },
+        Ok(None) => Err("No file selected".to_string()),
+        Err(_) => Err("Dialog error".to_string()),
     }
 }
 
@@ -94,46 +196,15 @@ async fn get_video_metadata(app: tauri::AppHandle, file_path: String) -> Result<
 }
 
 pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: String) -> Result<VideoMetadata, String> {
-    use std::process::Command;
+    // Validate file first
+    validate_video_file_internal(file_path.clone()).await?;
     
-    // First validate the file
-    let _validation_result = validate_video_file_internal(file_path.clone()).await?;
+    let ffprobe_path = get_ffprobe_path()?;
     
-    // Try multiple possible paths for ffprobe
-    let possible_paths = [
-        // Path in project root
-        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .parent()
-            .unwrap()
-            .join("ffprobe"),
-        // Current directory
-        std::path::PathBuf::from("./ffprobe"),
-        // Absolute path
-        std::path::PathBuf::from("/Users/courtneyblaskovich/Documents/Projects/ClipForge/ffprobe"),
-        // Binaries directory
-        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .join("binaries")
-            .join("ffprobe"),
-    ];
-    
-    // Find the first path that exists
-    let ffprobe_path = possible_paths.iter()
-        .find(|path| {
-            println!("Checking FFprobe at: {:?}", path);
-            path.exists()
-        })
-        .ok_or_else(|| {
-            println!("FFprobe not found in any of the expected locations");
-            "FFprobe binary not found. Please ensure ffprobe is in the project root.".to_string()
-        })?;
-    
-    println!("Using FFprobe at: {:?}", ffprobe_path);
-    
-    // Build FFprobe command
-    let output = Command::new(&ffprobe_path)
+    let output = std::process::Command::new(&ffprobe_path)
         .args(&[
             "-v", "error",
-            "-show_entries", "format=duration:stream=width,height,codec_name",
+            "-show_entries", "format=duration:stream=codec_type,codec_name,width,height",
             "-of", "json",
             &file_path
         ])
@@ -142,68 +213,41 @@ pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: Stri
     
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        
-        // Parse FFprobe error to provide user-friendly message
-        if stderr.contains("moov atom not found") || stderr.contains("Invalid data found") {
-            return Err("This file is not a valid video file or is corrupted.".to_string());
-        } else if stderr.contains("No such file or directory") {
-            return Err("File not found. It may have been moved or deleted.".to_string());
-        } else if stderr.contains("Permission denied") {
-            return Err("Permission denied. Unable to access this file.".to_string());
-        } else if stderr.contains("Unsupported") || stderr.contains("not supported") {
-            return Err("This video format is not supported.".to_string());
-        } else {
-            // Generic fallback for unknown errors
-            return Err("Unable to process this video file. It may be corrupted or in an unsupported format.".to_string());
-        }
+        return Err(format!("FFprobe error: {}", stderr));
     }
     
-    // Parse JSON output
-    let output_str = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value = serde_json::from_str(&output_str)
+    let json_output = String::from_utf8(output.stdout)
+        .map_err(|e| format!("Failed to read FFprobe output: {}", e))?;
+    
+    let parsed: serde_json::Value = serde_json::from_str(&json_output)
         .map_err(|e| format!("Failed to parse FFprobe output: {}", e))?;
     
-    // Extract metadata with better error handling
-    println!("FFprobe JSON output: {}", output_str);
+    let duration = parsed["format"]["duration"]
+        .as_str()
+        .and_then(|s| s.parse::<f64>().ok())
+        .ok_or("Could not parse duration")?;
     
-    let format = json.get("format").ok_or("No format section in FFprobe output")?;
+    let streams = parsed["streams"]
+        .as_array()
+        .ok_or("No streams found")?;
     
-    // Get duration from format section
-    let duration = format.get("duration")
-        .and_then(|d| d.as_str())
-        .and_then(|d| d.parse::<f64>().ok())
-        .unwrap_or(0.0); // Default to 0 if missing
+    let video_stream = streams
+        .iter()
+        .find(|s| s["codec_type"] == "video")
+        .ok_or("No video stream found")?;
     
-    // Get streams array, may be empty
-    // Create a longer-lived empty Vec to avoid temporary value issue
-    let empty_streams = Vec::new();
-    let streams = json.get("streams")
-        .and_then(|s| s.as_array())
-        .unwrap_or(&empty_streams);
+    let width = video_stream["width"]
+        .as_i64()
+        .ok_or("Could not parse width")? as i32;
     
-    // Try to find video stream
-    let video_stream = streams.iter()
-        .find(|s| s.get("codec_type").and_then(|t| t.as_str()) == Some("video"))
-        .or_else(|| streams.first()); // Fallback to first stream if no explicit video stream
+    let height = video_stream["height"]
+        .as_i64()
+        .ok_or("Could not parse height")? as i32;
     
-    // Default values for missing fields
-    let width = video_stream
-        .and_then(|s| s.get("width"))
-        .and_then(|w| w.as_i64())
-        .map(|w| w as i32)
-        .unwrap_or(640); // Default width
-    
-    let height = video_stream
-        .and_then(|s| s.get("height"))
-        .and_then(|h| h.as_i64())
-        .map(|h| h as i32)
-        .unwrap_or(480); // Default height
-    
-    let codec = video_stream
-        .and_then(|s| s.get("codec_name"))
-        .and_then(|c| c.as_str())
-        .map(|c| c.to_string())
-        .unwrap_or("unknown".to_string()); // Default codec
+    let codec = video_stream["codec_name"]
+        .as_str()
+        .ok_or("Could not parse codec")?
+        .to_string();
     
     Ok(VideoMetadata {
         duration,
@@ -213,188 +257,52 @@ pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: Stri
     })
 }
 
-// Helper function to get FFmpeg binary path
-fn get_ffmpeg_path() -> Result<std::path::PathBuf, String> {
+pub fn get_ffmpeg_path() -> Result<std::path::PathBuf, String> {
+    // Try multiple possible locations for FFmpeg
     let possible_paths = [
-        // Path in project root
-        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default())
-            .parent()
-            .unwrap()
-            .join("ffmpeg"),
-        // Current directory
-        std::path::PathBuf::from("./ffmpeg"),
-        // Absolute path
-        std::path::PathBuf::from("/Users/courtneyblaskovich/Documents/Projects/ClipForge/ffmpeg"),
-        // Binaries directory
-        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default())
-            .join("binaries")
-            .join("ffmpeg"),
+        // Bundled binaries (for production)
+        std::path::PathBuf::from("binaries/ffmpeg-aarch64-apple-darwin"),
+        std::path::PathBuf::from("binaries/ffmpeg"),
+        // Development paths
+        std::path::PathBuf::from("ffmpeg"),
+        std::path::PathBuf::from("ffmpeg-aarch64-apple-darwin"),
+        // System paths
+        std::path::PathBuf::from("/opt/homebrew/bin/ffmpeg"),
+        std::path::PathBuf::from("/usr/local/bin/ffmpeg"),
+        std::path::PathBuf::from("/usr/bin/ffmpeg"),
     ];
     
-    possible_paths.iter()
-        .find(|path| path.exists())
-        .cloned()
-        .ok_or_else(|| "FFmpeg binary not found. Please ensure FFmpeg is in the project root.".to_string())
+    for path in &possible_paths {
+        if path.exists() {
+            return Ok(path.clone());
+        }
+    }
+    
+    Err("FFmpeg not found. Please ensure FFmpeg is installed and accessible.".to_string())
 }
 
-#[tauri::command]
-async fn select_export_path(app: tauri::AppHandle, default_filename: String) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
+pub fn get_ffprobe_path() -> Result<std::path::PathBuf, String> {
+    // Try multiple possible locations for FFprobe
+    let possible_paths = [
+        // Bundled binaries (for production)
+        std::path::PathBuf::from("binaries/ffprobe-aarch64-apple-darwin"),
+        std::path::PathBuf::from("binaries/ffprobe"),
+        // Development paths
+        std::path::PathBuf::from("ffprobe"),
+        std::path::PathBuf::from("ffprobe-aarch64-apple-darwin"),
+        // System paths
+        std::path::PathBuf::from("/opt/homebrew/bin/ffprobe"),
+        std::path::PathBuf::from("/usr/local/bin/ffprobe"),
+        std::path::PathBuf::from("/usr/bin/ffprobe"),
+    ];
     
-    // Use a channel to get the result from the callback
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    
-    app.dialog()
-        .file()
-        .set_title("Export Video")
-        .set_file_name(&default_filename)
-        .add_filter("MP4 Video", &["mp4"])
-        .save_file(move |file_path| {
-            let _ = tx.send(file_path);
-        });
-    
-    // Wait for the result
-    match rx.await {
-        Ok(Some(path)) => {
-            let path_str = path.to_string();
-            
-            // Check if file exists
-            if Path::new(&path_str).exists() {
-                // File exists - need confirmation
-                // Return special error that frontend will handle
-                Err(format!("FILE_EXISTS:{}", path_str))
-            } else {
-                Ok(Some(path_str))
-            }
-        },
-        Ok(None) => Ok(None), // User cancelled
-        Err(_) => Err("Failed to receive file selection result".to_string()),
-    }
-}
-
-#[derive(Deserialize)]
-struct ClipExportInfo {
-    path: String,
-    in_point: f64,
-    out_point: f64,
-}
-
-#[tauri::command]
-async fn export_video(
-    clips: Vec<ClipExportInfo>,
-    output_path: String,
-) -> Result<String, String> {
-    // Step 1: Get FFmpeg binary path
-    let ffmpeg_path = get_ffmpeg_path()?;
-    
-    // Step 2: Build professional single-pass export with complex filter
-    // This approach: loads all clips → applies trim in filter → encodes once → outputs
-    // No intermediate files, no double encoding, matches Premiere/Final Cut Pro
-    println!("Building single-pass export for {} clips", clips.len());
-    
-    let mut ffmpeg_args = Vec::new();
-    
-    // Step 2a: Add all input files with -ss (fast seek before -i)
-    for (i, clip) in clips.iter().enumerate() {
-        println!("Input clip {}: {} (trim: {:.3}s - {:.3}s)", 
-                 i, clip.path, clip.in_point, clip.out_point);
-        
-        // Fast seek to approximately the right position (before -i)
-        ffmpeg_args.push("-ss".to_string());
-        ffmpeg_args.push(clip.in_point.to_string());
-        ffmpeg_args.push("-i".to_string());
-        ffmpeg_args.push(clip.path.clone());
+    for path in &possible_paths {
+        if path.exists() {
+            return Ok(path.clone());
+        }
     }
     
-    // Step 2b: Build filter_complex with trim + scale for each clip
-    // This applies precise trim in the filter (after decoding)
-    // Scale all videos to 1280x720 to ensure uniform dimensions for concat
-    // Note: Clips have video only (no audio), so we use concat with a=0
-    let n = clips.len();
-    let mut filter_parts = Vec::new();
-    
-    for i in 0..n {
-        let clip = &clips[i];
-        let duration = clip.out_point - clip.in_point;
-        
-        // Video: trim → setpts → scale to 1280x720
-        // Scale ensures all clips have same dimensions (required for concat)
-        filter_parts.push(format!(
-            "[{}:v]trim=end={}[v{}t]; [v{}t]setpts=PTS-STARTPTS[v{}s]; [v{}s]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:-1:-1:black[v{}]",
-            i, duration, i, i, i, i, i
-        ));
-    }
-    
-    // Build concat inputs string: [v0][v1][v2] (video only)
-    let mut concat_inputs = String::new();
-    for i in 0..n {
-        concat_inputs.push_str(&format!("[v{}]", i));
-    }
-    
-    // Combine: trim+scale filters + concat (video only, no audio)
-    let filter_complex = format!(
-        "{}; {}concat=n={}:v=1:a=0[outv]",
-        filter_parts.join("; "),
-        concat_inputs,
-        n
-    );
-    
-    println!("Filter complex (single-pass):\n{}", filter_complex);
-    
-    ffmpeg_args.push("-filter_complex".to_string());
-    ffmpeg_args.push(filter_complex);
-    
-    // Step 2c: Map outputs and encode
-    ffmpeg_args.push("-map".to_string());
-    ffmpeg_args.push("[outv]".to_string());
-    
-    // Encoding parameters (video only, no audio in test clips)
-    ffmpeg_args.push("-c:v".to_string());
-    ffmpeg_args.push("libx264".to_string());
-    ffmpeg_args.push("-preset".to_string());
-    ffmpeg_args.push("fast".to_string());
-    ffmpeg_args.push("-crf".to_string());
-    ffmpeg_args.push("23".to_string());
-    ffmpeg_args.push("-pix_fmt".to_string());
-    ffmpeg_args.push("yuv420p".to_string());
-    ffmpeg_args.push("-y".to_string());
-    ffmpeg_args.push(output_path.clone());
-    
-    // Step 3: Execute single-pass export
-    println!("Executing single-pass export...");
-    
-    let output = std::process::Command::new(&ffmpeg_path)
-        .args(&ffmpeg_args)
-        .output()
-        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
-    
-    // Step 4: Check result
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        println!("FFmpeg export failed!");
-        println!("STDOUT: {}", stdout);
-        println!("STDERR: {}", stderr);
-        return Err(parse_ffmpeg_error(&stderr));
-    }
-    
-    println!("Export successful!");
-    
-    Ok(format!("Export successful: {}", output_path))
-}
-
-fn parse_ffmpeg_error(stderr: &str) -> String {
-    if stderr.contains("No such file") {
-        "Video file not found. It may have been moved or deleted.".to_string()
-    } else if stderr.contains("Invalid data") || stderr.contains("moov atom") {
-        "One or more video files are corrupted or invalid.".to_string()
-    } else if stderr.contains("Disk full") || stderr.contains("No space left") {
-        "Not enough disk space to export video.".to_string()
-    } else if stderr.contains("codec") {
-        "Video codec incompatibility. Try re-encoding (slower).".to_string()
-    } else {
-        format!("Export failed. FFmpeg error:\n\n{}", stderr)
-    }
+    Err("FFprobe not found. Please ensure FFprobe is installed and accessible.".to_string())
 }
 
 #[cfg(test)]
@@ -449,7 +357,10 @@ pub fn run() {
             select_video_file,
             get_video_metadata,
             select_export_path,
-            export_video
+            export_video,
+            extract_thumbnails,
+            save_project,
+            load_project
             // Commands will be added in future PRs:
             // - check_codec_compatibility
         ])

@@ -1,4 +1,7 @@
-import { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { ClipThumbnails } from './ClipThumbnails';
+
+const PIXELS_PER_SECOND = 50; // Base pixels per second (100% zoom)
 
 interface Clip {
   id: string;
@@ -10,6 +13,8 @@ interface Clip {
   codec: string;
   inPoint: number;
   outPoint: number;
+  volume: number;
+  muted: boolean;
 }
 
 interface TimelineProps {
@@ -21,9 +26,8 @@ interface TimelineProps {
   onSeek: (time: number) => void;
   onDeleteClip: (clipId: string) => void;
   onTrimChange: (clipId: string, inPoint: number, outPoint: number) => void;
+  zoomLevel: number;
 }
-
-const PIXELS_PER_SECOND = 50;
 
 export function Timeline({
   clips,
@@ -34,18 +38,20 @@ export function Timeline({
   onSeek,
   onDeleteClip,
   onTrimChange,
+  zoomLevel,
 }: TimelineProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
   
-  // State for dragging trim handles
-  const [draggingTrim, setDraggingTrim] = useState<{
-    clipId: string;
-    handle: 'in' | 'out';
-    clipStartX: number;
-    clipWidth: number;
-  } | null>(null);
+  // Trim dragging state
+  const [isDraggingTrim, setIsDraggingTrim] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragStartTime, setDragStartTime] = useState(0);
+  const [draggingTrim, setDraggingTrim] = useState<'in' | 'out' | null>(null);
 
-  // Calculate total timeline duration
+  // Calculate pixels per second based on zoom level
+  const pixelsPerSecond = PIXELS_PER_SECOND * zoomLevel;
+
+  // Calculate total timeline width
   const totalDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
 
   // Handle timeline click for scrubbing
@@ -59,7 +65,7 @@ export function Timeline({
     const adjustedClickX = Math.max(0, clickX);
     
     // Calculate time position
-    const timePosition = adjustedClickX / PIXELS_PER_SECOND;
+    const timePosition = adjustedClickX / pixelsPerSecond;
     
     // Calculate maximum allowed position
     // Use a minimum of 60 seconds or the total duration, whichever is greater
@@ -166,6 +172,72 @@ export function Timeline({
     document.body.appendChild(confirmDialog);
   };
 
+  // Trim handle dragging handlers
+  const handleTrimHandleMouseDown = (e: React.MouseEvent, clipId: string, trimType: 'in' | 'out') => {
+    e.stopPropagation();
+    setIsDraggingTrim(true);
+    setDragStartX(e.clientX);
+    setDraggingTrim(trimType);
+    
+    const clip = clips.find(c => c.id === clipId);
+    if (clip) {
+      const startTime = trimType === 'in' ? (clip.inPoint || 0) : (clip.outPoint || clip.duration);
+      setDragStartTime(startTime);
+    }
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDraggingTrim || !draggingTrim || !timelineRef.current) return;
+    
+    const deltaX = e.clientX - dragStartX;
+    const deltaTime = deltaX / pixelsPerSecond;
+    const newTime = dragStartTime + deltaTime;
+    
+    // Find the selected clip
+    const selectedClip = clips.find(c => c.id === selectedClipId);
+    if (!selectedClip) return;
+    
+    // Clamp the new time to valid ranges
+    let clampedTime = Math.max(0, Math.min(newTime, selectedClip.duration));
+    
+    // Snap to frame boundaries (0.033s for 30fps)
+    const FRAME_DURATION = 0.033;
+    clampedTime = Math.round(clampedTime / FRAME_DURATION) * FRAME_DURATION;
+    
+    // Ensure minimum duration between in and out points
+    const MIN_DURATION = 0.033;
+    if (draggingTrim === 'in') {
+      clampedTime = Math.min(clampedTime, selectedClip.outPoint - MIN_DURATION);
+    } else {
+      clampedTime = Math.max(clampedTime, selectedClip.inPoint + MIN_DURATION);
+    }
+    
+    // Update the trim point
+    if (draggingTrim === 'in') {
+      onTrimChange(selectedClip.id, clampedTime, selectedClip.outPoint);
+    } else {
+      onTrimChange(selectedClip.id, selectedClip.inPoint, clampedTime);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDraggingTrim(false);
+    setDraggingTrim(null);
+  };
+
+  // Add global mouse event listeners for dragging
+  React.useEffect(() => {
+    if (isDraggingTrim) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDraggingTrim, draggingTrim, dragStartX, dragStartTime, pixelsPerSecond, clips, selectedClipId, onTrimChange]);
+
   // Generate time markers for ruler
   const generateTimeMarkers = () => {
     const markers = [];
@@ -181,54 +253,6 @@ export function Timeline({
 
   const timeMarkers = generateTimeMarkers();
 
-  // Handle trim handle mouse down
-  const handleTrimHandleMouseDown = (
-    e: React.MouseEvent,
-    clipId: string,
-    handle: 'in' | 'out',
-    clipStartX: number,
-    clipWidth: number
-  ) => {
-    e.stopPropagation();
-    setDraggingTrim({ clipId, handle, clipStartX, clipWidth });
-  };
-
-  // Handle mouse move for trim dragging
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingTrim || !timelineRef.current) return;
-
-    const rect = timelineRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    
-    // Calculate position relative to clip start
-    const relativeX = mouseX - draggingTrim.clipStartX;
-    const relativeTime = relativeX / PIXELS_PER_SECOND;
-    
-    // Find the clip being trimmed
-    const clip = clips.find(c => c.id === draggingTrim.clipId);
-    if (!clip) return;
-
-    // Clamp to valid range
-    const clampedTime = Math.max(0, Math.min(clip.duration, relativeTime));
-    
-    if (draggingTrim.handle === 'in') {
-      // Don't allow in-point to go past out-point (leave minimum 0.033s)
-      const maxInPoint = clip.outPoint - 0.033;
-      const newInPoint = Math.min(clampedTime, maxInPoint);
-      onTrimChange(clip.id, newInPoint, clip.outPoint);
-    } else {
-      // Don't allow out-point to go before in-point (leave minimum 0.033s)
-      const minOutPoint = clip.inPoint + 0.033;
-      const newOutPoint = Math.max(clampedTime, minOutPoint);
-      onTrimChange(clip.id, clip.inPoint, newOutPoint);
-    }
-  };
-
-  // Handle mouse up for trim dragging
-  const handleMouseUp = () => {
-    setDraggingTrim(null);
-  };
-
   return (
     <div className="timeline-container">
       {/* Time Ruler */}
@@ -237,7 +261,7 @@ export function Timeline({
           <div
             key={time}
             className="time-marker"
-            style={{ left: `${time * PIXELS_PER_SECOND}px` }}
+            style={{ left: `${time * pixelsPerSecond}px` }}
           >
             <span className="time-label">{time}s</span>
             <div className="marker-line" />
@@ -250,9 +274,6 @@ export function Timeline({
         ref={timelineRef}
         className="timeline"
         onClick={handleTimelineClick}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
       >
         {/* Render Clips */}
         {clips.length === 0 ? (
@@ -266,12 +287,12 @@ export function Timeline({
               .slice(0, idx)
               .reduce((sum, c) => sum + c.duration, 0);
             
-            const clipWidth = clip.duration * PIXELS_PER_SECOND;
-            const clipStartX = startPosition * PIXELS_PER_SECOND;
+            const clipWidth = clip.duration * pixelsPerSecond;
+            const clipStartX = startPosition * pixelsPerSecond;
             
             // Calculate trim overlay positions
-            const inPointPixels = (clip.inPoint / clip.duration) * clipWidth;
-            const outPointPixels = (clip.outPoint / clip.duration) * clipWidth;
+            const inPointPixels = ((clip.inPoint || 0) / clip.duration) * clipWidth;
+            const outPointPixels = ((clip.outPoint || clip.duration) / clip.duration) * clipWidth;
             const trimmedStartWidth = inPointPixels;
             const trimmedEndWidth = clipWidth - outPointPixels;
             
@@ -298,7 +319,7 @@ export function Timeline({
                 </button>
                 
                 {/* Trim overlay - before in-point */}
-                {clip.inPoint > 0 && (
+                {(clip.inPoint || 0) > 0 && (
                   <div
                     className="trim-overlay"
                     style={{
@@ -309,7 +330,7 @@ export function Timeline({
                 )}
                 
                 {/* Trim overlay - after out-point */}
-                {clip.outPoint < clip.duration && (
+                {(clip.outPoint || clip.duration) < clip.duration && (
                   <div
                     className="trim-overlay"
                     style={{
@@ -320,28 +341,54 @@ export function Timeline({
                 )}
                 
                 {/* In-point trim handle */}
-                {clip.inPoint > 0 && (
+                {(clip.inPoint || 0) > 0 && (
                   <div
                     className="trim-handle in-point"
                     style={{
                       left: `${inPointPixels}px`,
                     }}
-                    onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'in', clipStartX, clipWidth)}
-                    title={`In Point: ${clip.inPoint.toFixed(2)}s`}
+                    title={`In Point: ${(clip.inPoint || 0).toFixed(2)}s`}
                   />
                 )}
                 
                 {/* Out-point trim handle */}
-                {clip.outPoint < clip.duration && (
+                {(clip.outPoint || clip.duration) < clip.duration && (
                   <div
                     className="trim-handle out-point"
                     style={{
                       left: `${outPointPixels}px`,
                     }}
-                    onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'out', clipStartX, clipWidth)}
-                    title={`Out Point: ${clip.outPoint.toFixed(2)}s`}
+                    title={`Out Point: ${(clip.outPoint || clip.duration).toFixed(2)}s`}
                   />
                 )}
+                
+                {/* Draggable Trim Handles */}
+                {selectedClipId === clip.id && (
+                  <>
+                    {/* In Point Handle */}
+                    <div
+                      className="trim-handle trim-handle-in"
+                      style={{
+                        left: `${inPointPixels}px`,
+                      }}
+                      onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'in')}
+                      title={`In Point: ${(clip.inPoint || 0).toFixed(2)}s`}
+                    />
+                    
+                    {/* Out Point Handle */}
+                    <div
+                      className="trim-handle trim-handle-out"
+                      style={{
+                        left: `${outPointPixels}px`,
+                      }}
+                      onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'out')}
+                      title={`Out Point: ${(clip.outPoint || clip.duration).toFixed(2)}s`}
+                    />
+                  </>
+                )}
+                
+                {/* Clip Thumbnails */}
+                <ClipThumbnails clip={clip} thumbnailCount={3} />
               </div>
             );
           })
@@ -352,7 +399,7 @@ export function Timeline({
           <div
             className="playhead"
             style={{
-              left: `${playheadPosition * PIXELS_PER_SECOND}px`,
+              left: `${playheadPosition * pixelsPerSecond}px`,
             }}
           />
         )}
