@@ -8,7 +8,7 @@ interface UseExportReturn {
   isExporting: boolean;
   exportError: string | null;
   exportSuccess: string | null;
-  handleExport: () => Promise<void>;
+  handleExport: (width: number, height: number) => Promise<void>;
   clearExportError: () => void;
   clearExportSuccess: () => void;
 }
@@ -24,7 +24,7 @@ export function useExport(clips: Clip[]): UseExportReturn {
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
 
-  const handleExport = async () => {
+  const handleExport = async (width: number, height: number) => {
     if (clips.length === 0) {
       setExportError("No clips to export. Import videos first.");
       return;
@@ -92,6 +92,7 @@ export function useExport(clips: Clip[]): UseExportReturn {
         outPoint: clip.outPoint,
         volume: clip.volume,
         muted: clip.muted,
+        sourceOffset: clip.sourceOffset,
       }));
       
       const pipTrackData = pipTrackClips.map(clip => ({
@@ -101,14 +102,17 @@ export function useExport(clips: Clip[]): UseExportReturn {
         outPoint: clip.outPoint,
         volume: clip.volume,
         muted: clip.muted,
+        sourceOffset: clip.sourceOffset,
         pipSettings: clip.pipSettings,
       }));
       
-      // Export with multi-track support
+      // Export with multi-track support and resolution
       await invoke<string>('export_multi_track_video', {
         mainTrackClips: mainTrackData,
         pipTrackClips: pipTrackData,
         outputPath,
+        width,
+        height,
       });
       
       setExportSuccess(outputPath);

@@ -32,6 +32,28 @@
 - ✅ **Type Safety** - Comprehensive TypeScript interfaces and error handling
 - ✅ **Professional State Management** - Custom useHistory hook for undo/redo functionality
 
+**Recording System:**
+- ✅ **MediaRecorder API Integration** - Screen and webcam recording with WebM format
+- ✅ **Dual Track Recording** - Simultaneous screen + webcam with separate files
+- ✅ **Audio Capture** - System audio + microphone with device selection
+- ✅ **File Management** - Auto-save to `~/Movies/ClipForge Recordings/`
+- ✅ **Metadata Extraction** - Duration, dimensions, codec, file size with WebM fallbacks
+- ✅ **Timeline Integration** - Automatic clip creation and track assignment
+- ✅ **Audio Playback** - Volume and mute controls working correctly
+
+**Media Library & Import Workflow:**
+- ✅ **Media Library Panel** - Left sidebar with grid view of imported clips
+- ✅ **Import-to-Library Workflow** - All imports go to library first, then manually added to timeline
+- ✅ **Drag-and-Drop Integration** - Library clips draggable to timeline tracks
+- ✅ **Metadata Display** - Full metadata (duration, resolution, file size, codec) displayed in library
+- ✅ **Clip Reusability** - Clips remain in library after being added to timeline
+
+**Export System:**
+- ✅ **Export Resolution Options** - Users can select 720p, 1080p, or source resolution via export settings modal
+- ✅ **Source Resolution Detection** - Automatically calculates max dimensions from clips with even-number enforcement
+- ✅ **Upscaling Warnings** - Alerts users when exporting at higher resolution than source
+- ✅ **Dynamic FFmpeg Filtering** - All filter chains adapt to selected resolution (main track, PiP positioning)
+
 **User Experience:**
 - ✅ **Professional Keyboard Shortcuts** - Complete shortcut system (Cmd+N, Cmd+S, Cmd+E, etc.)
 - ✅ **Toast Notification System** - User-friendly error handling with expandable details
@@ -200,7 +222,97 @@
   - **Implementation**: Mac .dmg packaging without code signing
   - **Technical Details**: Platform-specific FFmpeg binary bundling
 
+## Requirements vs. Implementation Status
+
+### ✅ Missing Features - NOW IMPLEMENTED
+
+**1. Media Library Panel** ✅ COMPLETE
+- **Requirement**: "Media library panel showing imported clips"
+- **Implementation Status**: ✅ Complete
+- **Features Implemented**:
+  - Left sidebar library panel with grid view of imported clips
+  - Clips import to library first, then manually added to timeline
+  - Drag-and-drop from library to timeline tracks (main/PiP)
+  - Action buttons: "Add to Main", "Add to PiP", Delete
+  - Thumbnail previews for each library clip
+  - Full metadata display (filename, duration, resolution, file size, codec)
+  - Clips remain in library after being added to timeline (can reuse)
+- **Files Created**: `src/components/MediaLibrary.tsx`, `src/styles/media-library.css`
+- **Files Modified**: `src/App.tsx`, `src/components/Timeline.tsx`, `src/utils/dragDrop.ts`, `src/utils/videoProcessing.ts`
+
+**2. File Size Metadata Display** ✅ COMPLETE
+- **Requirement**: "Basic metadata display (duration, resolution, file size)"
+- **Implementation Status**: ✅ Complete
+- **Features Implemented**:
+  - File size captured during metadata extraction (Rust backend)
+  - File size displayed in ClipThumbnails component
+  - Human-readable formatting (B, KB, MB, GB) via `formatHelpers.ts`
+  - Backward compatible (optional field for existing clips)
+- **Files Created**: `src/utils/formatHelpers.ts`
+- **Files Modified**: `src-tauri/src/lib.rs`, `src/types/index.ts`, `src/utils/videoProcessing.ts`, `src/components/ClipThumbnails.tsx`, `src/App.tsx`
+
+**3. Export Resolution Options** ✅ COMPLETE
+- **Requirement**: "Resolution options (720p, 1080p, or source resolution)"
+- **Implementation Status**: ✅ Complete
+- **Features Implemented**:
+  - Export settings modal with resolution selector (720p, 1080p, source)
+  - Source resolution calculated from max clip dimensions (ensures even dimensions for FFmpeg)
+  - Upscaling warning when exporting at higher resolution than source
+  - Dynamic resolution in FFmpeg filter chains (main and PiP tracks)
+  - Export resolution validation (64x64 to 7680x4320)
+  - Keyboard shortcut Cmd+E opens export settings
+- **Files Created**: `src/components/ExportSettingsModal.tsx`, `src/styles/export-settings.css`
+- **Files Modified**: `src/App.tsx`, `src/components/ExportButton.tsx`, `src/hooks/useExport.ts`, `src/utils/keyboardHandler.ts`, `src-tauri/src/export.rs`
+
+**4. Drag Clips from Library to Timeline** ✅ COMPLETE
+- **Requirement**: "Drag clips onto timeline"
+- **Implementation Status**: ✅ Complete
+- **Features Implemented**:
+  - ✅ Library clips are draggable from MediaLibrary component
+  - ✅ Can drag library clips to timeline main or PiP tracks
+  - ✅ Drag data includes source information to distinguish from timeline reordering
+  - ✅ Timeline drop handlers detect library clips vs timeline clips
+  - ✅ Files can be dragged from file system to app for import (app-level drop)
+  - ✅ Clips on timeline can be dragged to reorder them
+
+**5. Cloud Upload/Sharing** ❌ (Bonus Feature)
+- **Requirement**: "Upload to cloud storage (Google Drive, Dropbox) or generate shareable link" (marked as bonus)
+- **Current State**: Documented as "out of scope" in `productContext.md`.
+- **Impact**: Users must export locally; no cloud integration available.
+
+### Future Enhancement Priority
+
+Based on full requirements:
+1. ~~**Export Resolution Options** - High priority~~ ✅ **COMPLETE**
+2. ~~**Media Library Panel** - Medium priority~~ ✅ **COMPLETE**
+3. ~~**File Size Display** - Low priority~~ ✅ **COMPLETE**
+4. **Cloud Upload/Sharing** - Low priority (bonus feature, requires third-party integrations)
+
 ## What's Left to Build
+
+### ✅ Post-MVP Features Implemented
+
+**Recording Features ✅ COMPLETE**
+- ✅ Screen recording (full screen or window selection)
+- ✅ Webcam recording (with microphone audio capture)
+- ✅ Simultaneous screen + webcam recording (PiP style - separate files)
+- ✅ System audio capture for screen recording (when enabled)
+- ✅ Microphone audio capture with device selection
+- ✅ Auto-add recordings to timeline (screen → main track, webcam → PiP track)
+- ✅ 1-hour recording limit with auto-stop
+- ✅ WebM format (VP9/Opus codecs) for instant save
+- ✅ Robust error handling and MediaStreamTrack cleanup
+- ✅ Audio playback working correctly in VideoPlayer
+
+**Clip Splitting Feature ✅ COMPLETE**
+- ✅ Split clip at playhead position (keyboard shortcut: S)
+- ✅ Creates two clean clips (both have inPoint=0, outPoint=duration)
+- ✅ Part 1: from original start to split point
+- ✅ Part 2: from split point to original end (with sourceOffset)
+- ✅ Works with both main and PiP tracks (prioritizes main track)
+- ✅ Undo/redo support
+- ✅ Toast notifications for success/error
+- ✅ Updated keyboard shortcuts help dialog
 
 ### ✅ ALL FEATURES COMPLETE!
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './../App.css';
 import { Clip } from '../types';
+import { formatFileSize } from '../utils/formatHelpers';
 
 interface ClipThumbnailsProps {
   clip: Clip;
@@ -27,9 +28,11 @@ export const ClipThumbnails: React.FC<ClipThumbnailsProps> = ({
     setError(null);
     
     try {
+      // Pass duration if available (especially for WebM recordings)
       const thumbnailDataUrls = await invoke<string[]>('extract_thumbnails', {
         filePath: clip.path,
         count: thumbnailCount,
+        duration: clip.duration > 0 ? clip.duration : undefined,
       });
       
       // Even if we get an empty array, that's OK - it means extraction failed gracefully
@@ -94,6 +97,11 @@ export const ClipThumbnails: React.FC<ClipThumbnailsProps> = ({
           </div>
         ))}
       </div>
+      {clip.fileSize && (
+        <div className="clip-metadata" style={{ marginTop: '8px', fontSize: '12px', color: '#999' }}>
+          File Size: {formatFileSize(clip.fileSize)} | Resolution: {clip.width}×{clip.height} | Duration: {clip.duration.toFixed(1)}s
+        </div>
+      )}
     </div>
   );
 };

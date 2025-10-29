@@ -149,6 +149,24 @@ async fn save_project(app: tauri::AppHandle, clips: Vec<serde_json::Value>, time
 }
 
 #[tauri::command]
+async fn save_recording(filename: String, data: Vec<u8>) -> Result<String, String> {
+    // Save to user's Videos folder in a "ClipForge Recordings" subfolder
+    let videos_dir = dirs::video_dir()
+        .ok_or_else(|| "Could not find videos directory".to_string())?;
+    
+    let recordings_dir = videos_dir.join("ClipForge Recordings");
+    std::fs::create_dir_all(&recordings_dir)
+        .map_err(|e| format!("Failed to create recordings directory: {}", e))?;
+    
+    let file_path = recordings_dir.join(&filename);
+    
+    std::fs::write(&file_path, data)
+        .map_err(|e| format!("Failed to write recording: {}", e))?;
+    
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 async fn load_project(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     use tauri_plugin_dialog::DialogExt;
     use tokio::sync::oneshot;
@@ -188,6 +206,7 @@ pub struct VideoMetadata {
     pub width: i32,
     pub height: i32,
     pub codec: String,
+    pub file_size: u64, // File size in bytes
 }
 
 #[tauri::command]
@@ -222,10 +241,17 @@ pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: Stri
     let parsed: serde_json::Value = serde_json::from_str(&json_output)
         .map_err(|e| format!("Failed to parse FFprobe output: {}", e))?;
     
+    // Try to get duration - WebM files might need different parsing
+    // FFprobe can return duration as a string or number, and format might be different
     let duration = parsed["format"]["duration"]
         .as_str()
         .and_then(|s| s.parse::<f64>().ok())
-        .ok_or("Could not parse duration")?;
+        .or_else(|| parsed["format"]["duration"].as_f64())
+        .ok_or_else(|| {
+            // Log the actual JSON structure for debugging WebM files
+            eprintln!("FFprobe JSON output for {}:\n{}", file_path, json_output);
+            format!("Could not parse duration from format. JSON structure: {}", json_output)
+        })?;
     
     let streams = parsed["streams"]
         .as_array()
@@ -249,11 +275,17 @@ pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: Stri
         .ok_or("Could not parse codec")?
         .to_string();
     
+    // Get file size from filesystem metadata
+    let file_metadata = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    let file_size = file_metadata.len();
+    
     Ok(VideoMetadata {
         duration,
         width,
         height,
         codec,
+        file_size,
     })
 }
 
@@ -361,7 +393,8 @@ pub fn run() {
             export_multi_track_video,
             extract_thumbnails,
             save_project,
-            load_project
+            load_project,
+            save_recording
             // Commands will be added in future PRs:
             // - check_codec_compatibility
         ])

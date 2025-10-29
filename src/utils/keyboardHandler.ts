@@ -1,6 +1,6 @@
 export interface KeyboardHandlers {
   handleNewProject: () => void;
-  handleExport: () => void;
+  handleOpenExportSettings: () => void;
   undo: () => void;
   redo: () => void;
   handleSaveProject: () => void;
@@ -15,11 +15,14 @@ export interface KeyboardHandlers {
   totalTimelineDuration: number;
   handleSetInPoint: () => void;
   handleSetOutPoint: () => void;
+  handleSplitClip: () => void;
   handleDeleteClip: (clipId: string) => void;
   selectedClipId: string | null;
   addToast: (toast: any) => void;
   showSuccessToast: (message: string) => any;
   TOAST_MESSAGES: any;
+  handleOpenRecordingModal?: () => void;
+  handleCloseRecordingModal?: () => void;
 }
 
 export function createKeyboardHandler(handlers: KeyboardHandlers) {
@@ -36,10 +39,19 @@ export function createKeyboardHandler(handlers: KeyboardHandlers) {
       return;
     }
 
-    // Cmd+E / Ctrl+E for Quick Export
+    // Cmd+R / Ctrl+R for Recording
+    if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+      e.preventDefault();
+      if (handlers.handleOpenRecordingModal) {
+        handlers.handleOpenRecordingModal();
+      }
+      return;
+    }
+
+    // Cmd+E / Ctrl+E for Quick Export (opens export settings)
     if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
       e.preventDefault();
-      handlers.handleExport();
+      handlers.handleOpenExportSettings();
       return;
     }
 
@@ -106,6 +118,9 @@ export function createKeyboardHandler(handlers: KeyboardHandlers) {
     if (e.key === 'Escape') {
       e.preventDefault();
       handlers.setShowKeyboardHelp(false);
+      if (handlers.handleCloseRecordingModal) {
+        handlers.handleCloseRecordingModal();
+      }
       return;
     }
 
@@ -173,6 +188,15 @@ export function createKeyboardHandler(handlers: KeyboardHandlers) {
     if (e.key === 'o') {
       e.preventDefault();
       handlers.handleSetOutPoint();
+      return;
+    }
+
+    // S for split clip at playhead
+    if (e.key === 's' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      if (handlers.handleSplitClip) {
+        handlers.handleSplitClip();
+      }
       return;
     }
 

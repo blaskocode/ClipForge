@@ -1,0 +1,189 @@
+/* Export Settings Modal Styles */
+
+.export-settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.export-settings-modal {
+  background: #2a2a2a;
+  border-radius: 8px;
+  padding: 0;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.export-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #444;
+  background: #333;
+}
+
+.export-settings-header h2 {
+  margin: 0;
+  color: #4a90e2;
+  font-size: 20px;
+}
+
+.export-settings-header .close-button {
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.export-settings-header .close-button:hover {
+  background: #444;
+  color: #fff;
+}
+
+.export-settings-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.resolution-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resolution-selector label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.resolution-selector select {
+  padding: 10px 12px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.resolution-selector select:hover {
+  border-color: #666;
+}
+
+.resolution-selector select:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.upscaling-warning {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #3d2a1a;
+  border-left: 4px solid #ffa500;
+  border-radius: 4px;
+}
+
+.warning-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.warning-text {
+  flex: 1;
+}
+
+.warning-text strong {
+  display: block;
+  color: #ffa500;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.warning-text p {
+  margin: 0;
+  color: #ddd;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.resolution-preview {
+  padding: 12px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  border: 1px solid #333;
+}
+
+.preview-info {
+  color: #fff;
+  font-size: 14px;
+}
+
+.source-note {
+  color: #4a90e2;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.export-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid #444;
+  background: #333;
+}
+
+.cancel-button,
+.export-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cancel-button {
+  background: #444;
+  color: #fff;
+}
+
+.cancel-button:hover {
+  background: #555;
+}
+
+.export-button {
+  background: #28a745;
+  color: #fff;
+}
+
+.export-button:hover {
+  background: #218838;
+}
+

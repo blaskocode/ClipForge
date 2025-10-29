@@ -11,21 +11,23 @@ export interface VideoProcessingHandlers {
   TOAST_MESSAGES: any;
 }
 
-export async function processVideoFile(filePath: string, handlers: VideoProcessingHandlers): Promise<void> {
+export async function processVideoFile(filePath: string, handlers: VideoProcessingHandlers): Promise<Clip | null> {
   console.log("processVideoFile called with path:", filePath);
   try {
-    // Check clip limit - hard limit at 50 clips
-    if (handlers.clips.length >= 50) {
-      handlers.addToast(handlers.showErrorToast("Maximum of 50 clips allowed. Please remove some clips before importing more."));
-      return;
+    // Check library clip limit - hard limit at 50 clips
+    // Note: This is for library only, timeline clips are separate
+    const totalClips = handlers.clips.length;
+    if (totalClips >= 50) {
+      handlers.addToast(handlers.showErrorToast("Maximum of 50 clips in library allowed. Please remove some clips before importing more."));
+      return null;
     }
     
     // Warning at 20 clips
-    if (handlers.clips.length >= 20) {
+    if (totalClips >= 20) {
       const shouldContinue = confirm(
-        `WARNING: You have ${handlers.clips.length} clips. Importing more than 20 clips may cause performance issues.\n\nDo you want to continue?`
+        `WARNING: You have ${totalClips} clips. Importing more than 20 clips may cause performance issues.\n\nDo you want to continue?`
       );
-      if (!shouldContinue) return;
+      if (!shouldContinue) return null;
     }
 
     console.log("Validating video file...");
@@ -35,7 +37,7 @@ export async function processVideoFile(filePath: string, handlers: VideoProcessi
     
     if (validationResult.startsWith("WARNING")) {
       const shouldContinue = confirm(`${validationResult}\n\nDo you want to continue?`);
-      if (!shouldContinue) return;
+      if (!shouldContinue) return null;
     }
 
     console.log("Getting video metadata...");
@@ -45,6 +47,7 @@ export async function processVideoFile(filePath: string, handlers: VideoProcessi
       width: number;
       height: number;
       codec: string;
+      file_size: number;
     }>("get_video_metadata", { filePath });
 
     console.log("Metadata:", metadata);
@@ -63,20 +66,18 @@ export async function processVideoFile(filePath: string, handlers: VideoProcessi
       volume: 100,  // Default to normal volume
       muted: false,  // Default to not muted
       track: 'main',  // Default to main track
+      fileSize: metadata.file_size,
     };
     
     console.log("New clip created:", newClip);
-    const newClips = [...handlers.clips, newClip];
-    handlers.pushState({
-      clips: newClips,
-      selectedClipId: handlers.selectedClipId,
-    });
     
-    // Show success toast
-    handlers.addToast(handlers.showSuccessToast(handlers.TOAST_MESSAGES.CLIPS_IMPORTED(1)));
+    // Return the clip instead of adding to timeline
+    // The caller (App.tsx) will add it to library
+    return newClip;
     
   } catch (error) {
     console.error("Error processing video file:", error);
     handlers.addToast(handlers.showErrorToast("Failed to import video", error instanceof Error ? error.message : String(error)));
+    return null;
   }
 }

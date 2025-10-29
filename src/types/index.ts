@@ -12,6 +12,8 @@ export interface Clip {
   volume: number;  // 0-200 (100 = normal, 0 = mute, 200 = 2x boost)
   muted: boolean;
   track: 'main' | 'pip';
+  sourceOffset?: number; // For split clips: offset into the source file where this clip starts
+  fileSize?: number; // File size in bytes (optional for backward compatibility)
   pipSettings?: {
     x: number;      // 0-1 (percentage of main video width)
     y: number;      // 0-1 (percentage of main video height)

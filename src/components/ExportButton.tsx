@@ -2,11 +2,11 @@ import { Clip } from '../types';
 
 interface ExportButtonProps {
   clips: Clip[];
-  onExport: () => Promise<void>;
+  onExportClick: () => void; // Opens export settings modal
   isExporting: boolean;
 }
 
-export function ExportButton({ clips, onExport, isExporting }: ExportButtonProps) {
+export function ExportButton({ clips, onExportClick, isExporting }: ExportButtonProps) {
   const hasClips = clips.length > 0;
   const isDisabled = !hasClips || isExporting;
   
@@ -23,7 +23,7 @@ export function ExportButton({ clips, onExport, isExporting }: ExportButtonProps
   return (
     <button
       className="export-button"
-      onClick={onExport}
+      onClick={onExportClick}
       disabled={isDisabled}
       title={!hasClips ? 'Import clips first' : 'Export video with trim points'}
     >

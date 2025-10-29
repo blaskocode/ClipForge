@@ -43,6 +43,26 @@ header h1 {
   opacity: 0.6;
 }
 
+/* Record Button */
+.record-button {
+  padding: 10px 20px;
+  background: #d9534f;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.record-button:hover {
+  background: #e96661;
+}
+
 /* New Project Button */
 .new-project-button {
   padding: 10px 20px;

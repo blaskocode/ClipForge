@@ -39,6 +39,7 @@ export const TOAST_MESSAGES = {
   PROJECT_SAVED: 'Project saved successfully',
   PROJECT_LOADED: 'Project loaded successfully',
   CLIP_DELETED: 'Clip deleted from timeline',
+  CLIP_SPLIT: 'Clip split at playhead',
   TRIM_UPDATED: 'Trim points updated',
   NEW_PROJECT: 'New project created',
   UNDO: 'Action undone',

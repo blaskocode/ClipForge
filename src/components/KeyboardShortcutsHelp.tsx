@@ -13,6 +13,7 @@ export const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = ({ is
     { key: 'Delete / Backspace', description: 'Delete selected clip' },
     { key: 'I', description: 'Set in-point at playhead' },
     { key: 'O', description: 'Set out-point at playhead' },
+    { key: 'S', description: 'Split clip at playhead' },
     { key: '← / →', description: 'Seek backward/forward 5 seconds' },
     { key: 'Cmd+← / Ctrl+←', description: 'Jump to start of timeline' },
     { key: 'J', description: 'Seek backward 5 seconds' },
@@ -21,6 +22,7 @@ export const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = ({ is
     { key: 'Home', description: 'Jump to start of timeline' },
     { key: 'End', description: 'Jump to end of timeline' },
     { key: 'Cmd+N / Ctrl+N', description: 'New Project' },
+    { key: 'Cmd+R / Ctrl+R', description: 'Start Recording' },
     { key: 'Cmd+E / Ctrl+E', description: 'Quick Export' },
     { key: 'Cmd+Z / Ctrl+Z', description: 'Undo' },
     { key: 'Cmd+Shift+Z / Ctrl+Y', description: 'Redo' },
@@ -45,7 +47,19 @@ export const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = ({ is
           <div className="shortcuts-section">
             <h3>Playback</h3>
             <div className="shortcuts-list">
-              {shortcuts.slice(0, 4).map((shortcut, index) => (
+              {shortcuts.slice(0, 1).map((shortcut, index) => (
+                <div key={index} className="shortcut-item">
+                  <span className="shortcut-key">{shortcut.key}</span>
+                  <span className="shortcut-description">{shortcut.description}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="shortcuts-section">
+            <h3>Editing</h3>
+            <div className="shortcuts-list">
+              {shortcuts.slice(1, 6).map((shortcut, index) => (
                 <div key={index} className="shortcut-item">
                   <span className="shortcut-key">{shortcut.key}</span>
                   <span className="shortcut-description">{shortcut.description}</span>
@@ -57,7 +71,7 @@ export const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = ({ is
           <div className="shortcuts-section">
             <h3>Navigation</h3>
             <div className="shortcuts-list">
-              {shortcuts.slice(4, 10).map((shortcut, index) => (
+              {shortcuts.slice(6, 12).map((shortcut, index) => (
                 <div key={index} className="shortcut-item">
                   <span className="shortcut-key">{shortcut.key}</span>
                   <span className="shortcut-description">{shortcut.description}</span>
@@ -69,19 +83,7 @@ export const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = ({ is
           <div className="shortcuts-section">
             <h3>Project & Export</h3>
             <div className="shortcuts-list">
-              {shortcuts.slice(10, 16).map((shortcut, index) => (
-                <div key={index} className="shortcut-item">
-                  <span className="shortcut-key">{shortcut.key}</span>
-                  <span className="shortcut-description">{shortcut.description}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="shortcuts-section">
-            <h3>Timeline</h3>
-            <div className="shortcuts-list">
-              {shortcuts.slice(16, 20).map((shortcut, index) => (
+              {shortcuts.slice(12, 18).map((shortcut, index) => (
                 <div key={index} className="shortcut-item">
                   <span className="shortcut-key">{shortcut.key}</span>
                   <span className="shortcut-description">{shortcut.description}</span>
@@ -93,7 +95,7 @@ export const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = ({ is
           <div className="shortcuts-section">
             <h3>General</h3>
             <div className="shortcuts-list">
-              {shortcuts.slice(20).map((shortcut, index) => (
+              {shortcuts.slice(22).map((shortcut, index) => (
                 <div key={index} className="shortcut-item">
                   <span className="shortcut-key">{shortcut.key}</span>
                   <span className="shortcut-description">{shortcut.description}</span>

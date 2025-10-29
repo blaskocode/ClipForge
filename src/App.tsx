@@ -10,6 +10,10 @@ import { UndoRedoButtons } from "./components/UndoRedoButtons";
 import { ProjectMenu } from "./components/ProjectMenu";
 import { AudioControls } from "./components/AudioControls";
 import { ZoomControls } from "./components/ZoomControls";
+import { RecordingModal } from "./components/RecordingModal";
+import { MediaLibrary } from "./components/MediaLibrary";
+import { ExportSettingsModal, ExportResolution } from "./components/ExportSettingsModal";
+import { invoke } from "@tauri-apps/api/core";
 import { Toast, showSuccessToast, showErrorToast, TOAST_MESSAGES } from "./utils/toastHelpers";
 import { useHistory, HistoryState } from "./hooks/useHistory";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -23,6 +27,7 @@ import { saveProject, loadProject, createNewProject } from "./utils/projectManag
 import { handleZoomIn, handleZoomOut, handleZoomToFit } from "./utils/zoomControls";
 import { handleVolumeChange, handleMuteToggle } from "./utils/audioControls";
 import { findActiveClipAtTime, calculateLocalTimeInClip } from "./utils/timelineCalculations";
+import { splitClipAtPlayhead } from "./utils/clipSplitting";
 import "./App.css";
 
 function App() {
@@ -59,6 +64,9 @@ function App() {
   const [isVideoActuallyPlaying, setIsVideoActuallyPlaying] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [showRecordingModal, setShowRecordingModal] = useState(false);
+  const [libraryClips, setLibraryClips] = useState<Clip[]>([]); // Media library clips (not on timeline)
+  const [showExportSettings, setShowExportSettings] = useState(false);
 
   // Toast system
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -86,7 +94,7 @@ function App() {
     const dragDropHandlers = {
       setIsDragging,
       processVideoFile: (filePath: string) => processVideoFile(filePath, {
-        clips,
+        clips: [...clips, ...libraryClips], // Total clips for limit checking
         addToast,
         showSuccessToast,
         showErrorToast,
@@ -95,19 +103,25 @@ function App() {
         TOAST_MESSAGES,
       }),
       clips,
+      libraryClips,
+      onImportComplete: (newClip: Clip) => {
+        setLibraryClips(prev => [...prev, newClip]);
+      },
       addToast,
       showErrorToast,
+      showSuccessToast,
+      TOAST_MESSAGES,
     };
 
     const cleanup = setupDragAndDrop(dragDropHandlers);
     if (cleanup) {
       cleanup();
     }
-  }, [clips, selectedClipId]);
+  }, [clips, libraryClips, selectedClipId]);
 
   const handleImport = async (filePath: string) => {
-    await processVideoFile(filePath, {
-      clips,
+    const newClip = await processVideoFile(filePath, {
+      clips: [...clips, ...libraryClips], // Total clips for limit checking
       addToast,
       showSuccessToast,
       showErrorToast,
@@ -115,6 +129,12 @@ function App() {
       selectedClipId,
       TOAST_MESSAGES,
     });
+    
+    if (newClip) {
+      // Add to library instead of timeline
+      setLibraryClips(prev => [...prev, newClip]);
+      addToast(showSuccessToast(TOAST_MESSAGES.CLIPS_IMPORTED(1)));
+    }
   };
 
   // Helper function to update selected clip with history
@@ -127,6 +147,38 @@ function App() {
 
   const handleClipSelect = (clipId: string) => {
     updateSelectedClip(clipId);
+  };
+
+  // Add library clip to timeline
+  const handleAddToTimeline = (libraryClip: Clip, track: 'main' | 'pip') => {
+    // Create a new clip instance for the timeline (with unique ID)
+    const timelineClip: Clip = {
+      ...libraryClip,
+      id: `timeline-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      track,
+    };
+    
+    pushState({
+      clips: [...clips, timelineClip],
+      selectedClipId: timelineClip.id,
+    });
+    
+    addToast(showSuccessToast(`Added "${libraryClip.filename}" to ${track === 'main' ? 'Main' : 'PiP'} track`));
+  };
+
+  // Delete clip from library
+  const handleDeleteFromLibrary = (clipId: string) => {
+    setLibraryClips(prev => prev.filter(clip => clip.id !== clipId));
+    addToast(showSuccessToast('Clip removed from library'));
+  };
+
+  // Preview library clip in video player (without adding to timeline)
+  // Note: VideoPlayer only shows timeline clips, so we can't actually preview library clips
+  // This is for future enhancement - for now, just clicking doesn't do anything
+  const handlePreviewLibraryClip = (clip: Clip) => {
+    // Future: Could add library clips to a temporary preview state
+    // For now, library clips need to be added to timeline to preview
+    console.log('Preview library clip:', clip.filename);
   };
 
   // Calculate total timeline duration using FULL clip durations
@@ -183,6 +235,34 @@ function App() {
     }
   };
 
+  // Handle clip splitting at playhead
+  const handleSplitClip = () => {
+    const currentPlayheadPosition = playheadPositionRef.current;
+    
+    // Try to split on main track first, fallback to pip track
+    const result = splitClipAtPlayhead(currentPlayheadPosition, clips, 'main');
+    
+    if (result) {
+      pushState({
+        clips: result.newClips,
+        selectedClipId: result.selectedClipId,
+      });
+      
+      addToast(showSuccessToast(TOAST_MESSAGES.CLIP_SPLIT || 'Clip split successfully'));
+    } else {
+      // No clip at playhead or invalid split position
+      const activeMainClip = findActiveClipAtTime('main', currentPlayheadPosition, clips);
+      const activePipClip = findActiveClipAtTime('pip', currentPlayheadPosition, clips);
+      
+      if (!activeMainClip && !activePipClip) {
+        addToast(showErrorToast('No clip at playhead position'));
+      } else {
+        // Clip exists but split point is invalid (at edge)
+        addToast(showErrorToast('Cannot split clip at this position. Move playhead to the middle of a clip.'));
+      }
+    }
+  };
+
   // Handle clip reordering
   const handleClipsReorder = (newClips: Clip[]) => {
     pushState({
@@ -233,6 +313,141 @@ function App() {
     }
   };
 
+  // Handle recording completion
+  const handleRecordingComplete = async (
+    startTime: number,
+    duration: number,
+    screenFile?: string,
+    webcamFile?: string
+  ) => {
+    console.log('handleRecordingComplete called:', { startTime, duration, screenFile, webcamFile });
+    
+    try {
+      const newClips: Clip[] = [];
+      
+      // Add screen recording to main track
+      if (screenFile) {
+        console.log('Getting metadata for screen recording:', screenFile);
+        try {
+          // Try to get metadata, but use recording duration as fallback
+          let width = 1920; // Default fallback
+          let height = 1080; // Default fallback
+          let codec = 'vp9'; // MediaRecorder uses VP9 for WebM
+          let fileSize: number | undefined = undefined;
+          
+          try {
+            const metadata = await invoke<{
+              duration: number;
+              width: number;
+              height: number;
+              codec: string;
+              file_size: number;
+            }>('get_video_metadata', { filePath: screenFile });
+            
+            console.log('Screen recording metadata:', metadata);
+            
+            // Use metadata if available, otherwise use defaults
+            width = metadata.width || width;
+            height = metadata.height || height;
+            codec = metadata.codec || codec;
+            fileSize = metadata.file_size;
+          } catch (error) {
+            console.warn('Could not get full metadata for screen recording, using defaults and calculated duration:', error);
+            // Continue with calculated duration and defaults
+          }
+          
+          newClips.push({
+            id: crypto.randomUUID(),
+            path: screenFile,
+            filename: `Screen Recording ${new Date(startTime).toLocaleTimeString()}`,
+            duration: duration, // Use calculated duration from recording
+            width: width,
+            height: height,
+            codec: codec,
+            inPoint: 0,
+            outPoint: duration,
+            volume: 100,
+            muted: false,
+            track: 'main',
+            fileSize: fileSize,
+          });
+        } catch (error) {
+          console.error('Failed to create clip for screen recording:', error);
+          addToast(showErrorToast(`Failed to process screen recording: ${error instanceof Error ? error.message : 'Unknown error'}`));
+        }
+      }
+      
+      // Add webcam recording to PiP track
+      if (webcamFile) {
+        console.log('Getting metadata for webcam recording:', webcamFile);
+        try {
+          // Try to get metadata, but use recording duration as fallback
+          let width = 1280; // Default fallback
+          let height = 720; // Default fallback
+          let codec = 'vp9'; // MediaRecorder uses VP9 for WebM
+          let fileSize: number | undefined = undefined;
+          
+          try {
+            const metadata = await invoke<{
+              duration: number;
+              width: number;
+              height: number;
+              codec: string;
+              file_size: number;
+            }>('get_video_metadata', { filePath: webcamFile });
+            
+            console.log('Webcam recording metadata:', metadata);
+            
+            // Use metadata if available, otherwise use defaults
+            width = metadata.width || width;
+            height = metadata.height || height;
+            codec = metadata.codec || codec;
+            fileSize = metadata.file_size;
+          } catch (error) {
+            console.warn('Could not get full metadata for webcam recording, using defaults and calculated duration:', error);
+            // Continue with calculated duration and defaults
+          }
+          
+          newClips.push({
+            id: crypto.randomUUID(),
+            path: webcamFile,
+            filename: `Webcam Recording ${new Date(startTime).toLocaleTimeString()}`,
+            fileSize: fileSize,
+            duration: duration, // Use calculated duration from recording
+            width: width,
+            height: height,
+            codec: codec,
+            inPoint: 0,
+            outPoint: duration,
+            volume: 100,
+            muted: false,
+            track: 'pip'
+          });
+        } catch (error) {
+          console.error('Failed to create clip for webcam recording:', error);
+          addToast(showErrorToast(`Failed to process webcam recording: ${error instanceof Error ? error.message : 'Unknown error'}`));
+        }
+      }
+      
+      if (newClips.length > 0) {
+        console.log('Adding clips to timeline:', newClips);
+        pushState({
+          clips: [...clips, ...newClips],
+          selectedClipId: newClips[0]?.id || null
+        });
+        
+        addToast(showSuccessToast(`Recording${newClips.length > 1 ? 's' : ''} added to timeline`));
+        setShowRecordingModal(false);
+      } else {
+        console.warn('No clips to add - both clip creations may have failed');
+        addToast(showErrorToast('Recording saved but could not be added to timeline'));
+      }
+    } catch (error) {
+      console.error('Failed to finalize recording:', error);
+      addToast(showErrorToast(`Failed to add recording to timeline: ${error instanceof Error ? error.message : 'Unknown error'}`));
+    }
+  };
+
   // Project management handlers
   const projectHandlers = {
     clips,
@@ -276,7 +491,7 @@ function App() {
   useEffect(() => {
     const keyboardHandlers = {
       handleNewProject,
-      handleExport,
+      handleOpenExportSettings: () => setShowExportSettings(true),
       undo,
       redo,
       handleSaveProject,
@@ -291,11 +506,14 @@ function App() {
       totalTimelineDuration,
       handleSetInPoint,
       handleSetOutPoint,
+      handleSplitClip,
       handleDeleteClip,
       selectedClipId,
       addToast,
       showSuccessToast,
       TOAST_MESSAGES,
+      handleOpenRecordingModal: () => setShowRecordingModal(true),
+      handleCloseRecordingModal: () => setShowRecordingModal(false),
     };
 
     const handleKeyDown = createKeyboardHandler(keyboardHandlers);
@@ -312,6 +530,13 @@ function App() {
         <h1>ClipForge</h1>
         <div className="header-controls">
           <ImportButton onImport={handleImport} />
+          <button
+            onClick={() => setShowRecordingModal(true)}
+            className="record-button"
+            title="Start Recording (Cmd+R)"
+          >
+            ⏺ Record
+          </button>
           <UndoRedoButtons
             onUndo={undo}
             onRedo={redo}
@@ -333,6 +558,16 @@ function App() {
           </button>
         </div>
       </header>
+
+      {/* Media Library Panel */}
+      <div className="media-library-area" style={{ gridArea: 'library' }}>
+        <MediaLibrary
+          libraryClips={libraryClips}
+          onAddToTimeline={handleAddToTimeline}
+          onDelete={handleDeleteFromLibrary}
+          onSelect={handlePreviewLibraryClip}
+        />
+      </div>
 
       {/* Video Player Area */}
       <div className="video-player-area">
@@ -369,7 +604,7 @@ function App() {
         />
         <ExportButton
           clips={clips}
-          onExport={handleExport}
+          onExportClick={() => setShowExportSettings(true)}
           isExporting={isExporting}
         />
       </div>
@@ -426,6 +661,12 @@ function App() {
           isPlaying={isPlaying}
           onPause={() => setIsPlaying(false)}
           isExporting={isExporting}
+          onLibraryClipDrop={(clipId, track) => {
+            const libraryClip = libraryClips.find(c => c.id === clipId);
+            if (libraryClip) {
+              handleAddToTimeline(libraryClip, track);
+            }
+          }}
         />
       </div>
 
@@ -436,6 +677,23 @@ function App() {
           onClose={() => setShowKeyboardHelp(false)} 
         />
       )}
+
+      {/* Recording Modal */}
+      <RecordingModal
+        isOpen={showRecordingModal}
+        onClose={() => setShowRecordingModal(false)}
+        onRecordingComplete={handleRecordingComplete}
+      />
+
+      {/* Export Settings Modal */}
+      <ExportSettingsModal
+        isOpen={showExportSettings}
+        onClose={() => setShowExportSettings(false)}
+        onExport={async (_resolution: ExportResolution, width: number, height: number) => {
+          await handleExport(width, height);
+        }}
+        clips={clips}
+      />
 
       {/* Toast Container */}
       <ToastContainer toasts={toasts} onClose={removeToast} />

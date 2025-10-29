@@ -43,14 +43,28 @@ ClipForge is being built for Gauntlet AI as a proof-of-concept video editor that
 
 ## Out of Scope for MVP
 These are explicitly excluded from MVP:
-- Screen/webcam recording
-- Audio capture from microphone
-- Multiple timeline tracks
+- Screen/webcam recording ✅ **IMPLEMENTED** (Post-MVP)
+- Audio capture from microphone ✅ **IMPLEMENTED** (Post-MVP)
+- Multiple timeline tracks ✅ **IMPLEMENTED** (Post-MVP)
 - Advanced transitions or effects
 - Text overlays
-- Audio volume controls
+- Audio volume controls ✅ **IMPLEMENTED** (Post-MVP)
 - Filters or color grading
-- Cloud upload/sharing
+- Cloud upload/sharing ❌ **NOT IMPLEMENTED** (Bonus feature)
 
 **Rationale**: MVP focuses on proving video file handling in desktop context. These are final submission features.
+
+## Missing Requirements (Full Project Scope)
+
+**✅ Recently Completed:**
+1. ~~**Media Library Panel**~~ ✅ **COMPLETE** - Separate panel to view/browse imported clips before adding to timeline
+2. ~~**File Size Metadata**~~ ✅ **COMPLETE** - Display file size alongside duration, resolution, codec
+
+**✅ Recently Completed:**
+3. ~~**Export Resolution Options**~~ ✅ **COMPLETE** - Allow users to select 720p, 1080p, or source resolution
+
+**Remaining Missing Features:**
+4. **Cloud Upload/Sharing** - Upload to Google Drive/Dropbox or generate shareable links (marked as bonus)
+
+**Note**: Export resolution options is documented in `clipforge_postmvp_prd.md` as a planned enhancement but not yet implemented.
 

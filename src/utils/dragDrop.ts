@@ -3,10 +3,14 @@ import { Clip } from '../types';
 
 export interface DragDropHandlers {
   setIsDragging: (dragging: boolean) => void;
-  processVideoFile: (filePath: string) => Promise<void>;
+  processVideoFile: (filePath: string) => Promise<Clip | null>;
   clips: Clip[];
+  libraryClips: Clip[];
+  onImportComplete: (clip: Clip) => void;
   addToast: (toast: any) => void;
   showErrorToast: (message: string) => any;
+  showSuccessToast: (message: string) => any;
+  TOAST_MESSAGES: any;
 }
 
 export function setupDragAndDrop(handlers: DragDropHandlers) {
@@ -54,15 +58,23 @@ export async function handleDroppedFiles(filePaths: string[], handlers: DragDrop
     return;
   }
 
-  // Check if bulk import would exceed hard limit
-  const totalAfterImport = handlers.clips.length + videoFiles.length;
+  // Check if bulk import would exceed hard limit (library + timeline)
+  const totalClips = handlers.clips.length + handlers.libraryClips.length;
+  const totalAfterImport = totalClips + videoFiles.length;
   if (totalAfterImport > 50) {
-    alert(`ERROR: Importing ${videoFiles.length} files would exceed the maximum of 50 clips. You currently have ${handlers.clips.length} clips. Please import fewer files or remove some clips first.`);
+    alert(`ERROR: Importing ${videoFiles.length} files would exceed the maximum of 50 clips. You currently have ${totalClips} clips. Please import fewer files or remove some clips first.`);
     return;
   }
 
-  // Process each video file
+  // Process each video file and add to library
   for (const filePath of videoFiles) {
-    await handlers.processVideoFile(filePath);
+    const newClip = await handlers.processVideoFile(filePath);
+    if (newClip) {
+      handlers.onImportComplete(newClip);
+    }
+  }
+  
+  if (videoFiles.length > 1) {
+    handlers.addToast(handlers.showSuccessToast(handlers.TOAST_MESSAGES.CLIPS_IMPORTED(videoFiles.length)));
   }
 }

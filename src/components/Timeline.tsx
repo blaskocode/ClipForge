@@ -19,6 +19,7 @@ interface TimelineProps {
   isPlaying: boolean;
   onPause: () => void;
   isExporting: boolean;
+  onLibraryClipDrop?: (clipId: string, track: 'main' | 'pip') => void;
 }
 
 export function Timeline({
@@ -35,6 +36,7 @@ export function Timeline({
   isPlaying,
   onPause,
   isExporting,
+  onLibraryClipDrop,
 }: TimelineProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
   
@@ -326,6 +328,23 @@ export function Timeline({
 
   const handleClipDrop = (e: React.DragEvent, targetTrack: 'main' | 'pip') => {
     e.preventDefault();
+    
+    // Check if this is a library clip drop
+    try {
+      const dragData = e.dataTransfer.getData('text/plain');
+      if (dragData) {
+        const parsed = JSON.parse(dragData);
+        if (parsed.source === 'library' && parsed.clipId) {
+          // Library clip drop - delegate to parent
+          if (onLibraryClipDrop) {
+            onLibraryClipDrop(parsed.clipId, targetTrack);
+          }
+          return;
+        }
+      }
+    } catch (err) {
+      // Not a library clip drop, continue with normal handling
+    }
     
     if (!draggedClipId) return;
     

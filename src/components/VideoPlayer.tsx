@@ -172,8 +172,13 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
       if (isVideoActuallyPlaying) {
         const videoTime = video.currentTime;
         
+        // Convert video time to local clip time (subtract source offset for split clips)
+        const sourceOffset = activeMainClip.sourceOffset ?? activeMainClip.inPoint;
+        const localClipTime = videoTime - sourceOffset;
+        
         // Handle trim boundaries - transition to next clip or pause
-        if (videoTime >= activeMainClip.outPoint) {
+        const clipEndTime = sourceOffset + activeMainClip.outPoint;
+        if (videoTime >= clipEndTime || localClipTime >= activeMainClip.outPoint) {
           // Find next Main clip
           const currentIndex = mainClips.findIndex(c => c.id === activeMainClip.id);
           
@@ -192,11 +197,11 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
           }
         }
         
-        // Calculate timeline position from video currentTime
+        // Calculate timeline position from local clip time
         let timelinePosition = 0;
         for (const clip of mainClips) {
           if (clip.id === activeMainClip.id) {
-            timelinePosition += videoTime;
+            timelinePosition += Math.max(0, localClipTime);
             onPlayheadUpdate(timelinePosition);
             break;
           }
@@ -219,15 +224,16 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     
     // Only seek if video is ready and we need to correct drift
     if (video.readyState >= 2) {
-      // Clamp target time to active range
-      const targetTime = Math.max(activeMainClip.inPoint, Math.min(mainClipLocalTime, activeMainClip.outPoint));
+      // Calculate target time: use sourceOffset if available
+      const sourceOffset = activeMainClip.sourceOffset ?? activeMainClip.inPoint;
+      const targetTime = Math.min(sourceOffset + mainClipLocalTime, sourceOffset + activeMainClip.outPoint);
       const drift = Math.abs(video.currentTime - targetTime);
       
       // Only seek if drift is significant (manual scrub or clip change)
       // This prevents seeking during normal playback
       if (drift > 0.2) {
         console.log('Seeking main video to', targetTime);
-        video.currentTime = targetTime;
+        video.currentTime = Math.max(sourceOffset, targetTime);
       }
     }
     
@@ -242,6 +248,15 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
       video.pause();
     }
   }, [activeMainClip, mainClipLocalTime, isPlaying]);
+
+  // Sync audio volume and muted state to video element
+  useEffect(() => {
+    if (!videoRef.current || !activeMainClip) return;
+    
+    const video = videoRef.current;
+    video.volume = activeMainClip.muted ? 0 : activeMainClip.volume / 100;
+    video.muted = activeMainClip.muted;
+  }, [activeMainClip?.id, activeMainClip?.volume, activeMainClip?.muted]);
 
   // Handle video source changes (for clip transitions)
   useEffect(() => {
@@ -262,8 +277,15 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     // When video is ready, seek to position and resume playback if needed
     const syncVideoPosition = () => {
       console.log('Main clip loaded, seeking to position');
-      const targetTime = Math.max(activeMainClip.inPoint, Math.min(mainClipLocalTime, activeMainClip.outPoint));
-      video.currentTime = targetTime;
+      // Calculate target time in source file
+      // For split clips: use sourceOffset if available; otherwise use inPoint as source offset
+      const sourceOffset = activeMainClip.sourceOffset ?? activeMainClip.inPoint;
+      const targetTime = Math.min(sourceOffset + mainClipLocalTime, sourceOffset + activeMainClip.outPoint);
+      video.currentTime = Math.max(sourceOffset, targetTime);
+      
+      // Sync audio settings after load
+      video.volume = activeMainClip.muted ? 0 : activeMainClip.volume / 100;
+      video.muted = activeMainClip.muted;
       
       // Resume playback if we were playing before the clip change (use ref for current state)
       if (isPlayingRef.current) {
@@ -280,6 +302,15 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
       video.removeEventListener('loadedmetadata', syncVideoPosition);
     };
   }, [activeMainClip?.id]); // Only when clip ID changes - use ref for play state!
+
+  // Sync PiP audio volume and muted state to video element
+  useEffect(() => {
+    if (!pipVideoRef.current || !activePipClip) return;
+    
+    const pipVideo = pipVideoRef.current;
+    pipVideo.volume = activePipClip.muted ? 0 : activePipClip.volume / 100;
+    pipVideo.muted = activePipClip.muted;
+  }, [activePipClip?.id, activePipClip?.volume, activePipClip?.muted]);
 
   // Handle PiP video source changes (for clip transitions)
   useEffect(() => {
@@ -308,11 +339,14 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     // When video is ready, seek to position and resume playback if needed
     const handleLoadedMetadata = () => {
       console.log('PiP clip loaded, seeking to position');
-      const targetTime = Math.max(
-        activePipClip.inPoint,
-        Math.min(pipClipLocalTime, activePipClip.outPoint)
-      );
-      pipVideo.currentTime = targetTime;
+      // For split clips: use sourceOffset if available
+      const sourceOffset = activePipClip.sourceOffset ?? activePipClip.inPoint;
+      const targetTime = Math.min(sourceOffset + pipClipLocalTime, sourceOffset + activePipClip.outPoint);
+      pipVideo.currentTime = Math.max(sourceOffset, targetTime);
+      
+      // Sync audio settings after load
+      pipVideo.volume = activePipClip.muted ? 0 : activePipClip.volume / 100;
+      pipVideo.muted = activePipClip.muted;
       
       // Resume playback if we were playing before the clip change (use ref for current state)
       if (isPlayingRef.current) {
@@ -356,15 +390,14 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     if (pipVideo.readyState < 2) return;
     
     // When playhead is manually moved (and not playing), update PiP position
-    const targetTime = Math.max(
-      activePipClip.inPoint,
-      Math.min(pipClipLocalTime, activePipClip.outPoint)
-    );
+    // For split clips: use sourceOffset if available
+    const sourceOffset = activePipClip.sourceOffset ?? activePipClip.inPoint;
+    const targetTime = Math.min(sourceOffset + pipClipLocalTime, sourceOffset + activePipClip.outPoint);
     const drift = Math.abs(pipVideo.currentTime - targetTime);
     
     // Only seek if drift is significant
     if (drift > 0.5) {
-      pipVideo.currentTime = targetTime;
+      pipVideo.currentTime = Math.max(sourceOffset, targetTime);
     }
   }, [pipClipLocalTime, activePipClip, isPlaying]);
 
@@ -377,17 +410,16 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     const driftCheckInterval = setInterval(() => {
       if (pipVideo.readyState < 2) return;
       
-      const targetTime = Math.max(
-        activePipClip.inPoint,
-        Math.min(pipClipLocalTime, activePipClip.outPoint)
-      );
+      // For split clips: use sourceOffset if available
+      const sourceOffset = activePipClip.sourceOffset ?? activePipClip.inPoint;
+      const targetTime = Math.min(sourceOffset + pipClipLocalTime, sourceOffset + activePipClip.outPoint);
       const drift = Math.abs(pipVideo.currentTime - targetTime);
       
       // Only seek if drift is very significant (>1 second)
       // This prevents constant seeking but keeps videos roughly in sync
       if (drift > 1.0) {
         console.log(`PiP drift correction: ${drift.toFixed(2)}s`);
-        pipVideo.currentTime = targetTime;
+        pipVideo.currentTime = Math.max(sourceOffset, targetTime);
       }
     }, 500); // Check every 500ms instead of every frame
     
@@ -486,6 +518,7 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
                 onLoadedMetadata={() => console.log("Video metadata loaded successfully")}
                 preload="metadata"
                 playsInline
+                muted={activeMainClip.muted}
                 style={{
                   width: '100%',
                   height: '100%',
@@ -520,7 +553,7 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
                 ref={pipVideoRef}
                 preload="metadata"
                 playsInline
-                muted
+                muted={activePipClip.muted}
                 className="pip-video"
                 style={{
                   position: 'absolute',
