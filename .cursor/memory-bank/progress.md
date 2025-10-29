@@ -43,6 +43,13 @@
 - ✅ **Non-Destructive Editing** - Clips maintain full length with trim overlays
 - ✅ **Professional Export** - Single-pass FFmpeg with resolution normalization
 - ✅ **Audio Integration** - Volume controls and mute functionality with export support
+- ✅ **Professional Video Sync** - RAF-based video-driven playback matching industry standards
+  - Video is master during playback (smooth native frame rate playback)
+  - Playhead syncs to video.currentTime every frame (60fps updates)
+  - Only seeks when drift >200ms or manual scrubbing
+  - Zero lag on play start, smooth playback throughout, no end-of-clip jumping
+  - Auto-pause when reaching end of final clip
+  - Professional clip transitions - seamless multi-clip playback without bouncing
 
 **File Management:**
 - ✅ **Project Files** - JSON-based project save/load with metadata

@@ -116,6 +116,13 @@ export function createKeyboardHandler(handlers: KeyboardHandlers) {
       return;
     }
 
+    // Cmd+Left / Ctrl+Left for going to beginning
+    if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowLeft') {
+      e.preventDefault();
+      handlers.updatePlayheadPosition(0);
+      return;
+    }
+
     // Arrow keys for seeking
     if (e.key === 'ArrowLeft') {
       e.preventDefault();

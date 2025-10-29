@@ -55,6 +55,7 @@ function App() {
   // Local state for UI-only concerns
   const [isDragging, setIsDragging] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isVideoActuallyPlaying, setIsVideoActuallyPlaying] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
 
@@ -139,6 +140,7 @@ function App() {
   // Timeline playback loop with smart trim skipping
   usePlaybackLoop({
     isPlaying,
+    isVideoActuallyPlaying,
     clips,
     totalTimelineDuration,
     playheadPosition,
@@ -193,6 +195,10 @@ function App() {
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying);
+  };
+
+  const handleVideoPlayStateChange = (isActuallyPlaying: boolean) => {
+    setIsVideoActuallyPlaying(isActuallyPlaying);
   };
 
   const handleDeleteClip = (clipId: string) => {
@@ -339,6 +345,9 @@ function App() {
           onPlayPause={handlePlayPause}
           totalTimelineDuration={totalTimelineDuration}
           playheadPosition={playheadPosition}
+          onVideoPlayStateChange={handleVideoPlayStateChange}
+          clips={clips}
+          onPlayheadUpdate={updatePlayheadPosition}
         />
       </div>
 

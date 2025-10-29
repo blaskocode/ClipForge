@@ -14,6 +14,7 @@ export const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = ({ is
     { key: 'I', description: 'Set in-point at playhead' },
     { key: 'O', description: 'Set out-point at playhead' },
     { key: '← / →', description: 'Seek backward/forward 5 seconds' },
+    { key: 'Cmd+← / Ctrl+←', description: 'Jump to start of timeline' },
     { key: 'J', description: 'Seek backward 5 seconds' },
     { key: 'K', description: 'Play/Pause (alternative)' },
     { key: 'L', description: 'Seek forward 5 seconds' },

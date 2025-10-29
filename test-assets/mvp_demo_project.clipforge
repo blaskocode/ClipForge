@@ -1,0 +1,34 @@
+{
+  "clips": [
+    {
+      "codec": "h264",
+      "duration": 3.305,
+      "filename": "IMG_2386.mp4",
+      "height": 1080,
+      "id": "clip-1761702572990-qhejo6w0v",
+      "inPoint": 0.99,
+      "muted": false,
+      "outPoint": 1.485,
+      "path": "/Users/courtneyblaskovich/Documents/Projects/ClipForge/test-assets/IMG_2386.mp4",
+      "volume": 100,
+      "width": 1920
+    },
+    {
+      "codec": "hevc",
+      "duration": 7.94,
+      "filename": "IMG_2384.MOV",
+      "height": 1080,
+      "id": "clip-1761702577388-nlnloubec",
+      "inPoint": 1.4582655246695393,
+      "muted": false,
+      "outPoint": 3.752469149672121,
+      "path": "/Users/courtneyblaskovich/Documents/Projects/ClipForge/test-assets/IMG_2384.MOV",
+      "volume": 100,
+      "width": 1920
+    }
+  ],
+  "timeline_state": {
+    "playhead_position": 8.32,
+    "selected_clip_id": null
+  }
+}

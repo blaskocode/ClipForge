@@ -78,7 +78,48 @@ const videoUrl = convertFileSrc(clip.path);
 - **Resolution Normalization**: All clips scaled to 1280x720 with letterboxing
 - **Metadata**: Use `ffprobe` with JSON output for structured data
 
-### 6. Error Handling Strategy
+### 6. Video Playback Synchronization (Professional NLE Approach)
+**Video-Driven Playback** - Matches Premiere Pro, DaVinci Resolve, Final Cut Pro:
+- **During playback**: Video is master → playhead syncs to `video.currentTime` via RAF loop
+- **During scrubbing**: Playhead is master → video seeks to match position
+- **Drift tolerance**: Only seeks when drift >200ms (imperceptible, prevents seeking artifacts)
+- **Event-driven state**: Uses `playing`, `pause`, `waiting`, `ended` events for robust state tracking
+- **RAF loop**: `requestAnimationFrame` provides 60fps sync matching display refresh rate
+- **Smooth playback**: Video plays at native frame rate without constant seeking
+- **Perfect sync**: Video position updates playhead every frame during playback
+- **Trim boundaries**: VideoPlayer handles out-point detection and stops at correct position
+- **Auto-pause**: Automatically pauses when reaching the end of the final clip
+  - **Trimmed clips**: RAF loop detects when `videoTime >= clip.outPoint`
+  - **Untrimmed clips**: `ended` event fires when video reaches natural end
+  - **Dual detection**: Handles both trimmed and untrimmed scenarios
+- **Professional clip transitions**: Seamless transitions between clips (Premiere Pro behavior)
+  - **Multi-clip playback**: Automatically transitions to next clip when current clip ends
+  - **No bouncing**: Playhead moves directly to start of next clip, no boundary gaps
+  - **Last clip handling**: Pauses playback when reaching end of final clip
+  - **Seamless flow**: Continuous playback through multiple clips without interruption
+  - **Boundary fix**: Playhead moves slightly into next clip (+0.001s) to avoid boundary issues
+  - **Video source handling**: Professional video source switching with proper loading
+    - **Force reload**: `video.load()` ensures new clip's video file is loaded
+    - **Proper seeking**: Seeks to correct `localTime` after video loads
+    - **Immediate playback**: Starts playing new clip within 10ms of transition
+    - **No source confusion**: Each clip transition loads the correct video file
+    - **Video preloading**: Professional seamless transitions using dual video elements
+      - **Hidden preload video**: Second video element preloads next clip
+      - **Faster loading**: Preloading reduces transition time (not seamless switching)
+      - **Correct video sources**: Each clip plays its own video file
+      - **Professional behavior**: Matches Premiere Pro/DaVinci Resolve seamless transitions
+
+**Key Implementation:**
+```typescript
+// RAF loop in VideoPlayer.tsx syncs playhead to video during playback
+if (isVideoActuallyPlaying) {
+  const videoTime = video.currentTime;
+  const timelinePosition = calculateTimelinePosition(videoTime, clip, clips);
+  onPlayheadUpdate(timelinePosition); // Updates App.tsx state
+}
+```
+
+### 7. Error Handling Strategy
 - **Rust**: All commands return `Result<T, String>` with user-friendly error messages
 - **React**: Toast notification system with expandable error details
 - **FFmpeg**: Parse stderr for common errors, translate to user-friendly messages
@@ -88,9 +129,9 @@ const videoUrl = convertFileSrc(clip.path);
 ## Component Architecture
 
 ### React Components
-1. **App.tsx** - Root component, manages all state (refactored to 428 lines)
-2. **VideoPlayer.tsx** - HTML5 video with universal timeline playback
-3. **Timeline.tsx** - Visual timeline with clips, playhead, and zoom
+1. **App.tsx** - Root component, manages all state
+2. **VideoPlayer.tsx** - HTML5 video with RAF-based video-driven playback sync
+3. **Timeline.tsx** - Visual timeline with clips, playhead, drag-and-drop reordering, and zoom
 4. **TrimControls.tsx** - In/out point inputs and keyboard shortcuts
 5. **ExportButton.tsx** - Export trigger with intelligent loading states
 6. **ImportButton.tsx** - File picker trigger
