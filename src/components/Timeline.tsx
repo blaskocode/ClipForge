@@ -40,10 +40,12 @@ export function Timeline({
 }: TimelineProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
   
-  const [isDraggingTrim, setIsDraggingTrim] = useState(false);
+  const [isDraggingEdge, setIsDraggingEdge] = useState(false);
   const [dragStartX, setDragStartX] = useState(0);
-  const [dragStartTime, setDragStartTime] = useState(0);
-  const [draggingTrim, setDraggingTrim] = useState<'in' | 'out' | null>(null);
+  const [dragStartInPoint, setDragStartInPoint] = useState(0);
+  const [dragStartOutPoint, setDragStartOutPoint] = useState(0);
+  const [draggingEdge, setDraggingEdge] = useState<'left' | 'right' | null>(null);
+  const [draggingEdgeClipId, setDraggingEdgeClipId] = useState<string | null>(null);
 
   const [draggedClipId, setDraggedClipId] = useState<string | null>(null);
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(null);
@@ -56,7 +58,12 @@ export function Timeline({
   const mainTrackClips = clips.filter(clip => clip.track === 'main');
   const pipTrackClips = clips.filter(clip => clip.track === 'pip');
   
-  const totalDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
+  // Calculate total duration using TRIMMED durations (for time markers)
+  // Sum both main and PiP tracks for time marker display
+  const totalDuration = clips.reduce((sum, clip) => {
+    const trimmedDuration = (clip.outPoint || clip.duration) - (clip.inPoint || 0);
+    return sum + trimmedDuration;
+  }, 0);
   
   // Calculate drop indicator position based on current drop index
   const calculateDropIndicator = () => {
@@ -212,58 +219,75 @@ export function Timeline({
     document.body.appendChild(confirmDialog);
   };
 
-  // Trim handle dragging handlers
-  const handleTrimHandleMouseDown = (e: React.MouseEvent, clipId: string, trimType: 'in' | 'out') => {
+  // Edge dragging handlers for iMovie-style trimming
+  const handleEdgeMouseDown = (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
     e.stopPropagation();
     e.preventDefault(); // Prevent clip drag from starting
-    setIsDraggingTrim(true);
-    setDragStartX(e.clientX);
-    setDraggingTrim(trimType);
     
     const clip = clips.find(c => c.id === clipId);
-    if (clip) {
-      const startTime = trimType === 'in' ? (clip.inPoint || 0) : (clip.outPoint || clip.duration);
-      setDragStartTime(startTime);
-    }
+    if (!clip) return;
+    
+    // Only allow edge dragging on selected clips
+    if (clipId !== selectedClipId) return;
+    
+    setIsDraggingEdge(true);
+    setDragStartX(e.clientX);
+    setDraggingEdge(edge);
+    setDraggingEdgeClipId(clipId);
+    setDragStartInPoint(clip.inPoint || 0);
+    setDragStartOutPoint(clip.outPoint || clip.duration);
   };
 
   const handleMouseMove = (e: MouseEvent) => {
-    if (!isDraggingTrim || !draggingTrim || !timelineRef.current) return;
+    if (!isDraggingEdge || !draggingEdge || !draggingEdgeClipId || !timelineRef.current) return;
     
     const deltaX = e.clientX - dragStartX;
-    const deltaTime = deltaX / pixelsPerSecond;
-    const newTime = dragStartTime + deltaTime;
+    const deltaTime = deltaX / pixelsPerSecond; // Positive = right, negative = left
     
-    // Find the selected clip
-    const selectedClip = clips.find(c => c.id === selectedClipId);
-    if (!selectedClip) return;
+    // Find the clip being trimmed
+    const clipBeingTrimmed = clips.find(c => c.id === draggingEdgeClipId);
+    if (!clipBeingTrimmed) return;
     
-    // Clamp the new time to valid ranges
-    let clampedTime = Math.max(0, Math.min(newTime, selectedClip.duration));
-    
-    // Snap to frame boundaries (0.033s for 30fps)
+    const MIN_DURATION = 0.033; // Frame-accurate for 30fps
     const FRAME_DURATION = 0.033;
-    clampedTime = Math.round(clampedTime / FRAME_DURATION) * FRAME_DURATION;
     
-    // Ensure minimum duration between in and out points
-    const MIN_DURATION = 0.033;
-    if (draggingTrim === 'in') {
-      clampedTime = Math.min(clampedTime, selectedClip.outPoint - MIN_DURATION);
+    let newInPoint = dragStartInPoint;
+    let newOutPoint = dragStartOutPoint;
+    
+    if (draggingEdge === 'left') {
+      // Left edge: dragging left (negative deltaX) = decrease inPoint (show more)
+      // Dragging right (positive deltaX) = increase inPoint (hide more)
+      // deltaTime: positive = right, negative = left
+      // To decrease inPoint when dragging left (negative deltaTime), we add (since deltaTime is negative)
+      newInPoint = dragStartInPoint + deltaTime;
+      newInPoint = Math.round(newInPoint / FRAME_DURATION) * FRAME_DURATION; // Snap to frame
+      // Clamp: 0 <= inPoint < outPoint (use current outPoint, not dragStartOutPoint)
+      const currentOutPoint = clipBeingTrimmed.outPoint || clipBeingTrimmed.duration;
+      newInPoint = Math.max(0, Math.min(newInPoint, currentOutPoint - MIN_DURATION));
+      // Keep outPoint unchanged when dragging left edge
+      newOutPoint = currentOutPoint;
     } else {
-      clampedTime = Math.max(clampedTime, selectedClip.inPoint + MIN_DURATION);
+      // Right edge: dragging right (positive deltaX) = increase outPoint (show more)
+      // Dragging left (negative deltaX) = decrease outPoint (hide more)
+      // deltaTime: positive = right, negative = left
+      // To increase outPoint when dragging right (positive deltaTime), we add
+      newOutPoint = dragStartOutPoint + deltaTime;
+      newOutPoint = Math.round(newOutPoint / FRAME_DURATION) * FRAME_DURATION; // Snap to frame
+      // Clamp: inPoint < outPoint <= duration (use current inPoint, not dragStartInPoint)
+      const currentInPoint = clipBeingTrimmed.inPoint || 0;
+      newOutPoint = Math.min(clipBeingTrimmed.duration, Math.max(newOutPoint, currentInPoint + MIN_DURATION));
+      // Keep inPoint unchanged when dragging right edge
+      newInPoint = currentInPoint;
     }
     
-    // Update the trim point
-    if (draggingTrim === 'in') {
-      onTrimChange(selectedClip.id, clampedTime, selectedClip.outPoint);
-    } else {
-      onTrimChange(selectedClip.id, selectedClip.inPoint, clampedTime);
-    }
+    // Update the trim points
+    onTrimChange(clipBeingTrimmed.id, newInPoint, newOutPoint);
   };
 
   const handleMouseUp = () => {
-    setIsDraggingTrim(false);
-    setDraggingTrim(null);
+    setIsDraggingEdge(false);
+    setDraggingEdge(null);
+    setDraggingEdgeClipId(null);
   };
 
   // Clip drag-and-drop handlers
@@ -408,7 +432,7 @@ export function Timeline({
   };
 
   React.useEffect(() => {
-    if (isDraggingTrim) {
+    if (isDraggingEdge) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       
@@ -417,7 +441,7 @@ export function Timeline({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDraggingTrim, draggingTrim, dragStartX, dragStartTime, pixelsPerSecond, clips, selectedClipId, onTrimChange]);
+  }, [isDraggingEdge, draggingEdge, dragStartX, dragStartInPoint, dragStartOutPoint, pixelsPerSecond, clips, onTrimChange]);
 
   const generateTimeMarkers = () => {
     const markers = [];
@@ -446,12 +470,8 @@ export function Timeline({
       const clipWidth = trimmedDuration * pixelsPerSecond;
       const clipStartX = startPosition * pixelsPerSecond;
       
-      // Calculate trim overlay positions (relative to full clip duration)
-      const fullClipWidth = clip.duration * pixelsPerSecond;
-      const inPointPixels = ((clip.inPoint || 0) / clip.duration) * fullClipWidth;
-      const outPointPixels = ((clip.outPoint || clip.duration) / clip.duration) * fullClipWidth;
-      const trimmedStartWidth = inPointPixels;
-      const trimmedEndWidth = clipWidth - outPointPixels;
+      const isSelected = selectedClipId === clip.id;
+      const EDGE_DRAG_ZONE_WIDTH = 10; // pixels
       
       return (
         <div
@@ -468,8 +488,8 @@ export function Timeline({
           style={{
             left: `${clipStartX}px`,
             width: `${clipWidth}px`,
-            cursor: isExporting ? 'not-allowed' : 'grab',
-            transition: draggedClipId ? 'none' : 'left 0.2s ease',
+            cursor: isExporting ? 'not-allowed' : (isSelected ? 'default' : 'grab'),
+            transition: draggedClipId ? 'none' : 'left 0.2s ease, width 0.2s ease',
           }}
         >
           <span className="clip-name">{clip.filename}</span>
@@ -480,39 +500,6 @@ export function Timeline({
           >
             ×
           </button>
-          
-          {/* Trim overlay - before in-point */}
-          {(clip.inPoint || 0) > 0 && (
-            <div
-              className="trim-overlay"
-              style={{
-                left: 0,
-                width: `${trimmedStartWidth}px`,
-              }}
-            />
-          )}
-          
-          {/* Trim overlay - after out-point */}
-          {(clip.outPoint || clip.duration) < clip.duration && (
-            <div
-              className="trim-overlay"
-              style={{
-                left: `${outPointPixels}px`,
-                width: `${trimmedEndWidth}px`,
-              }}
-            />
-          )}
-          
-          {/* In-point trim handle */}
-          {(clip.inPoint || 0) > 0 && (
-            <div
-              className="trim-handle in-point"
-              style={{
-                left: `${inPointPixels}px`,
-              }}
-              title={`In Point: ${(clip.inPoint || 0).toFixed(2)}s`}
-            />
-          )}
           
           {/* Filler word markers */}
           {clip.fillerWords && clip.fillerWords.length > 0 && clip.fillerWords.map((fillerWord, fwIndex) => {
@@ -554,38 +541,39 @@ export function Timeline({
             return null;
           })}
 
-          {/* Out-point trim handle */}
-          {(clip.outPoint || clip.duration) < clip.duration && (
-            <div
-              className="trim-handle out-point"
-              style={{
-                left: `${outPointPixels}px`,
-              }}
-              title={`Out Point: ${(clip.outPoint || clip.duration).toFixed(2)}s`}
-            />
-          )}
-          
-          {/* Draggable Trim Handles */}
-          {selectedClipId === clip.id && (
+          {/* Edge drag zones - only for selected clips */}
+          {isSelected && (
             <>
-              {/* In Point Handle */}
+              {/* Left edge drag zone */}
               <div
-                className="trim-handle trim-handle-in"
+                className="clip-edge-drag-zone clip-edge-left"
                 style={{
-                  left: `${inPointPixels}px`,
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: `${EDGE_DRAG_ZONE_WIDTH}px`,
+                  height: '100%',
+                  cursor: 'ew-resize',
+                  zIndex: 20,
                 }}
-                onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'in')}
-                title={`In Point: ${(clip.inPoint || 0).toFixed(2)}s`}
+                onMouseDown={(e) => handleEdgeMouseDown(e, clip.id, 'left')}
+                title="Drag to trim start"
               />
               
-              {/* Out Point Handle */}
+              {/* Right edge drag zone */}
               <div
-                className="trim-handle trim-handle-out"
+                className="clip-edge-drag-zone clip-edge-right"
                 style={{
-                  left: `${outPointPixels}px`,
+                  position: 'absolute',
+                  right: 0,
+                  top: 0,
+                  width: `${EDGE_DRAG_ZONE_WIDTH}px`,
+                  height: '100%',
+                  cursor: 'ew-resize',
+                  zIndex: 20,
                 }}
-                onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'out')}
-                title={`Out Point: ${(clip.outPoint || clip.duration).toFixed(2)}s`}
+                onMouseDown={(e) => handleEdgeMouseDown(e, clip.id, 'right')}
+                title="Drag to trim end"
               />
             </>
           )}

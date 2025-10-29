@@ -186,8 +186,13 @@ function App() {
     console.log('Preview library clip:', clip.filename);
   };
 
-  // Calculate total timeline duration using FULL clip durations
-  const totalTimelineDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
+  // Calculate total timeline duration using TRIMMED durations (sum of main track only)
+  const totalTimelineDuration = clips
+    .filter(clip => clip.track === 'main')
+    .reduce((sum, clip) => {
+      const trimmedDuration = (clip.outPoint || clip.duration) - (clip.inPoint || 0);
+      return sum + trimmedDuration;
+    }, 0);
 
   // Helper function to update playhead position (NOT in history - professional behavior)
   const updatePlayheadPosition = (newPosition: number) => {
@@ -208,36 +213,78 @@ function App() {
 
   // Helper functions for trim point setting
   const handleSetInPoint = () => {
+    if (!selectedClipId) return;
+    
+    const selectedClip = clips.find(c => c.id === selectedClipId);
+    if (!selectedClip) return;
+    
     const currentPlayheadPosition = playheadPositionRef.current;
     
-    // Check both Main and PIP tracks for active clips
-    const activeMainClip = findActiveClipAtTime('main', currentPlayheadPosition, clips);
-    const activePipClip = findActiveClipAtTime('pip', currentPlayheadPosition, clips);
+    // Calculate clip start time (sum of trimmed durations of clips before selected clip)
+    const trackClips = clips
+      .filter(c => c.track === selectedClip.track)
+      .sort((a, b) => {
+        const aIndex = clips.findIndex(c => c.id === a.id);
+        const bIndex = clips.findIndex(c => c.id === b.id);
+        return aIndex - bIndex;
+      });
     
-    // Prioritize Main track if both are active, otherwise use whichever is active
-    const activeClip = activeMainClip || activePipClip;
-    
-    if (activeClip) {
-      const localTime = calculateLocalTimeInClip(activeClip, currentPlayheadPosition, clips);
-      handleTrimChange(activeClip.id, localTime, activeClip.outPoint);
+    const clipIndex = trackClips.findIndex(c => c.id === selectedClip.id);
+    let clipStartTime = 0;
+    for (let i = 0; i < clipIndex; i++) {
+      const trimmedDuration = (trackClips[i].outPoint || trackClips[i].duration) - (trackClips[i].inPoint || 0);
+      clipStartTime += trimmedDuration;
     }
+    
+    // Calculate local time within the timeline
+    const localTimeInTimeline = currentPlayheadPosition - clipStartTime;
+    
+    // Calculate absolute time in clip source: localTimeInTimeline + clip's current inPoint
+    const absoluteTimeInClip = localTimeInTimeline + (selectedClip.inPoint || 0);
+    
+    // Clamp to valid range: 0 <= inPoint < outPoint <= duration
+    const MIN_DURATION = 0.033; // Frame-accurate minimum
+    const newInPoint = Math.max(0, Math.min(absoluteTimeInClip, (selectedClip.outPoint || selectedClip.duration) - MIN_DURATION));
+    
+    handleTrimChange(selectedClip.id, newInPoint, selectedClip.outPoint || selectedClip.duration);
   };
 
   const handleSetOutPoint = () => {
+    if (!selectedClipId) return;
+    
+    const selectedClip = clips.find(c => c.id === selectedClipId);
+    if (!selectedClip) return;
+    
     const currentPlayheadPosition = playheadPositionRef.current;
     
-    // Check both Main and PIP tracks for active clips
-    const activeMainClip = findActiveClipAtTime('main', currentPlayheadPosition, clips);
-    const activePipClip = findActiveClipAtTime('pip', currentPlayheadPosition, clips);
+    // Calculate clip start time (sum of trimmed durations of clips before selected clip)
+    const trackClips = clips
+      .filter(c => c.track === selectedClip.track)
+      .sort((a, b) => {
+        const aIndex = clips.findIndex(c => c.id === a.id);
+        const bIndex = clips.findIndex(c => c.id === b.id);
+        return aIndex - bIndex;
+      });
     
-    // Prioritize Main track if both are active, otherwise use whichever is active
-    const activeClip = activeMainClip || activePipClip;
-    
-    if (activeClip) {
-      const localTime = calculateLocalTimeInClip(activeClip, currentPlayheadPosition, clips);
-      handleTrimChange(activeClip.id, activeClip.inPoint, localTime);
-      setIsPlaying(false); // Stop playback when Out Point is set
+    const clipIndex = trackClips.findIndex(c => c.id === selectedClip.id);
+    let clipStartTime = 0;
+    for (let i = 0; i < clipIndex; i++) {
+      const trimmedDuration = (trackClips[i].outPoint || trackClips[i].duration) - (trackClips[i].inPoint || 0);
+      clipStartTime += trimmedDuration;
     }
+    
+    // Calculate local time within the timeline
+    const localTimeInTimeline = currentPlayheadPosition - clipStartTime;
+    
+    // Calculate absolute time in clip source: localTimeInTimeline + clip's current inPoint
+    const absoluteTimeInClip = localTimeInTimeline + (selectedClip.inPoint || 0);
+    
+    // Clamp to valid range: inPoint < outPoint <= duration
+    const MIN_DURATION = 0.033; // Frame-accurate minimum
+    const newOutPoint = Math.min(selectedClip.duration, Math.max(absoluteTimeInClip, (selectedClip.inPoint || 0) + MIN_DURATION));
+    
+    handleTrimChange(selectedClip.id, selectedClip.inPoint || 0, newOutPoint);
+    setIsPlaying(false); // Stop playback when Out Point is set
   };
 
   // Handle clip splitting at playhead

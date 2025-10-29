@@ -125,7 +125,8 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
           // We need to calculate the actual timeline position for the next clip
           let timelinePosition = 0;
           for (let i = 0; i <= currentIndex; i++) {
-            timelinePosition += mainClips[i].duration;
+            const trimmedDuration = (mainClips[i].outPoint || mainClips[i].duration) - (mainClips[i].inPoint || 0);
+            timelinePosition += trimmedDuration;
           }
           onPlayheadUpdate(timelinePosition + 0.001); // Small offset to ensure we're inside the next clip
         }
@@ -172,13 +173,18 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
       if (isVideoActuallyPlaying) {
         const videoTime = video.currentTime;
         
-        // Convert video time to local clip time (subtract source offset for split clips)
-        const sourceOffset = activeMainClip.sourceOffset ?? activeMainClip.inPoint;
-        const localClipTime = videoTime - sourceOffset;
+        // Convert video time to local clip time within the trimmed visible portion
+        // For split clips: use sourceOffset if available, otherwise use 0
+        const sourceOffset = activeMainClip.sourceOffset ?? 0;
+        const clipInPoint = activeMainClip.inPoint || 0;
+        const clipOutPoint = activeMainClip.outPoint || activeMainClip.duration;
         
-        // Handle trim boundaries - transition to next clip or pause
-        const clipEndTime = sourceOffset + activeMainClip.outPoint;
-        if (videoTime >= clipEndTime || localClipTime >= activeMainClip.outPoint) {
+        // Calculate local time within the trimmed portion (0 to trimmed duration)
+        const localClipTime = videoTime - sourceOffset - clipInPoint;
+        const trimmedDuration = clipOutPoint - clipInPoint;
+        
+        // Handle trim boundaries - transition to next clip or pause when we reach the end of trimmed portion
+        if (localClipTime >= trimmedDuration || videoTime >= (sourceOffset + clipOutPoint)) {
           // Find next Main clip
           const currentIndex = mainClips.findIndex(c => c.id === activeMainClip.id);
           
@@ -197,15 +203,19 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
           }
         }
         
-        // Calculate timeline position from local clip time
+        // Calculate timeline position from local clip time (within trimmed visible portion)
+        // localClipTime is already relative to the trimmed portion (0 to trimmed duration)
         let timelinePosition = 0;
         for (const clip of mainClips) {
           if (clip.id === activeMainClip.id) {
-            timelinePosition += Math.max(0, localClipTime);
+            // Clamp localClipTime to be within trimmed duration
+            const clipTrimmedDuration = (clip.outPoint || clip.duration) - (clip.inPoint || 0);
+            timelinePosition += Math.max(0, Math.min(localClipTime, clipTrimmedDuration));
             onPlayheadUpdate(timelinePosition);
             break;
           }
-          timelinePosition += clip.duration;
+          const trimmedDuration = (clip.outPoint || clip.duration) - (clip.inPoint || 0);
+          timelinePosition += trimmedDuration;
         }
       }
       
@@ -224,16 +234,21 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     
     // Only seek if video is ready and we need to correct drift
     if (video.readyState >= 2) {
-      // Calculate target time: use sourceOffset if available
-      const sourceOffset = activeMainClip.sourceOffset ?? activeMainClip.inPoint;
-      const targetTime = Math.min(sourceOffset + mainClipLocalTime, sourceOffset + activeMainClip.outPoint);
+      // mainClipLocalTime is the time within the trimmed visible portion (0 to trimmed duration)
+      // Map it to source file time: sourceOffset + inPoint + localTime
+      const sourceOffset = activeMainClip.sourceOffset ?? 0;
+      const clipInPoint = activeMainClip.inPoint || 0;
+      const clipOutPoint = activeMainClip.outPoint || activeMainClip.duration;
+      const sourceTime = sourceOffset + clipInPoint + mainClipLocalTime;
+      // Clamp to the trimmed range in the source file
+      const targetTime = Math.max(sourceOffset + clipInPoint, Math.min(sourceTime, sourceOffset + clipOutPoint));
       const drift = Math.abs(video.currentTime - targetTime);
       
       // Only seek if drift is significant (manual scrub or clip change)
       // This prevents seeking during normal playback
       if (drift > 0.2) {
         console.log('Seeking main video to', targetTime);
-        video.currentTime = Math.max(sourceOffset, targetTime);
+        video.currentTime = targetTime;
       }
     }
     
@@ -277,11 +292,15 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     // When video is ready, seek to position and resume playback if needed
     const syncVideoPosition = () => {
       console.log('Main clip loaded, seeking to position');
-      // Calculate target time in source file
-      // For split clips: use sourceOffset if available; otherwise use inPoint as source offset
-      const sourceOffset = activeMainClip.sourceOffset ?? activeMainClip.inPoint;
-      const targetTime = Math.min(sourceOffset + mainClipLocalTime, sourceOffset + activeMainClip.outPoint);
-      video.currentTime = Math.max(sourceOffset, targetTime);
+      // mainClipLocalTime is the time within the trimmed visible portion (0 to trimmed duration)
+      // Map it to source file time: sourceOffset + inPoint + localTime
+      const sourceOffset = activeMainClip.sourceOffset ?? 0;
+      const clipInPoint = activeMainClip.inPoint || 0;
+      const clipOutPoint = activeMainClip.outPoint || activeMainClip.duration;
+      const sourceTime = sourceOffset + clipInPoint + mainClipLocalTime;
+      // Clamp to the trimmed range in the source file
+      const targetTime = Math.max(sourceOffset + clipInPoint, Math.min(sourceTime, sourceOffset + clipOutPoint));
+      video.currentTime = targetTime;
       
       // Sync audio settings after load
       video.volume = activeMainClip.muted ? 0 : activeMainClip.volume / 100;
@@ -339,10 +358,16 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     // When video is ready, seek to position and resume playback if needed
     const handleLoadedMetadata = () => {
       console.log('PiP clip loaded, seeking to position');
-      // For split clips: use sourceOffset if available
-      const sourceOffset = activePipClip.sourceOffset ?? activePipClip.inPoint;
-      const targetTime = Math.min(sourceOffset + pipClipLocalTime, sourceOffset + activePipClip.outPoint);
-      pipVideo.currentTime = Math.max(sourceOffset, targetTime);
+      // For split clips: use sourceOffset if available, otherwise use inPoint
+      // pipClipLocalTime is the time within the trimmed visible portion (0 to trimmed duration)
+      // Map it to source file time: sourceOffset + inPoint + localTime
+      const sourceOffset = activePipClip.sourceOffset ?? 0;
+      const clipInPoint = activePipClip.inPoint || 0;
+      const clipOutPoint = activePipClip.outPoint || activePipClip.duration;
+      const sourceTime = sourceOffset + clipInPoint + pipClipLocalTime;
+      // Clamp to the trimmed range in the source file
+      const targetTime = Math.max(sourceOffset + clipInPoint, Math.min(sourceTime, sourceOffset + clipOutPoint));
+      pipVideo.currentTime = targetTime;
       
       // Sync audio settings after load
       pipVideo.volume = activePipClip.muted ? 0 : activePipClip.volume / 100;
@@ -390,14 +415,19 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     if (pipVideo.readyState < 2) return;
     
     // When playhead is manually moved (and not playing), update PiP position
-    // For split clips: use sourceOffset if available
-    const sourceOffset = activePipClip.sourceOffset ?? activePipClip.inPoint;
-    const targetTime = Math.min(sourceOffset + pipClipLocalTime, sourceOffset + activePipClip.outPoint);
+    // pipClipLocalTime is the time within the trimmed visible portion (0 to trimmed duration)
+    // Map it to source file time: sourceOffset + inPoint + localTime
+    const sourceOffset = activePipClip.sourceOffset ?? 0;
+    const clipInPoint = activePipClip.inPoint || 0;
+    const clipOutPoint = activePipClip.outPoint || activePipClip.duration;
+    const sourceTime = sourceOffset + clipInPoint + pipClipLocalTime;
+    // Clamp to the trimmed range in the source file
+    const targetTime = Math.max(sourceOffset + clipInPoint, Math.min(sourceTime, sourceOffset + clipOutPoint));
     const drift = Math.abs(pipVideo.currentTime - targetTime);
     
     // Only seek if drift is significant
     if (drift > 0.5) {
-      pipVideo.currentTime = Math.max(sourceOffset, targetTime);
+      pipVideo.currentTime = targetTime;
     }
   }, [pipClipLocalTime, activePipClip, isPlaying]);
 
@@ -410,16 +440,21 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
     const driftCheckInterval = setInterval(() => {
       if (pipVideo.readyState < 2) return;
       
-      // For split clips: use sourceOffset if available
-      const sourceOffset = activePipClip.sourceOffset ?? activePipClip.inPoint;
-      const targetTime = Math.min(sourceOffset + pipClipLocalTime, sourceOffset + activePipClip.outPoint);
+      // pipClipLocalTime is the time within the trimmed visible portion (0 to trimmed duration)
+      // Map it to source file time: sourceOffset + inPoint + localTime
+      const sourceOffset = activePipClip.sourceOffset ?? 0;
+      const clipInPoint = activePipClip.inPoint || 0;
+      const clipOutPoint = activePipClip.outPoint || activePipClip.duration;
+      const sourceTime = sourceOffset + clipInPoint + pipClipLocalTime;
+      // Clamp to the trimmed range in the source file
+      const targetTime = Math.max(sourceOffset + clipInPoint, Math.min(sourceTime, sourceOffset + clipOutPoint));
       const drift = Math.abs(pipVideo.currentTime - targetTime);
       
       // Only seek if drift is very significant (>1 second)
       // This prevents constant seeking but keeps videos roughly in sync
       if (drift > 1.0) {
         console.log(`PiP drift correction: ${drift.toFixed(2)}s`);
-        pipVideo.currentTime = Math.max(sourceOffset, targetTime);
+        pipVideo.currentTime = targetTime;
       }
     }, 500); // Check every 500ms instead of every frame
     

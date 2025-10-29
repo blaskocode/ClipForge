@@ -511,3 +511,41 @@
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* Edge Drag Zones for Selected Clips (iMovie-style) */
+.clip-edge-drag-zone {
+  background: transparent;
+  transition: background-color 0.2s;
+  pointer-events: auto;
+}
+
+.clip-edge-drag-zone:hover {
+  background: rgba(74, 144, 226, 0.3);
+}
+
+.clip-edge-drag-zone.clip-edge-left {
+  border-left: 3px solid transparent;
+  border-radius: 4px 0 0 4px;
+}
+
+.clip-edge-drag-zone.clip-edge-left:hover {
+  border-left-color: #4a90e2;
+  background: rgba(74, 144, 226, 0.2);
+}
+
+.clip-edge-drag-zone.clip-edge-right {
+  border-right: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
+}
+
+.clip-edge-drag-zone.clip-edge-right:hover {
+  border-right-color: #4a90e2;
+  background: rgba(74, 144, 226, 0.2);
+}
+
+/* Enhanced selected clip styling */
+.timeline-clip.selected {
+  border-color: #4a90e2;
+  border-width: 3px;
+  box-shadow: 0 0 15px rgba(74, 144, 226, 0.6);
+}

@@ -1,7 +1,8 @@
 import { Clip } from '../types';
 
 /**
- * Calculate the start time of a clip based on its position in its track
+ * Calculate the start time of a clip based on its ◄position in its track
+ * Uses trimmed durations (outPoint - inPoint) for accurate positioning
  */
 export function calculateClipStartTime(clip: Clip, allClips: Clip[]): number {
   const trackClips = allClips
@@ -16,21 +17,23 @@ export function calculateClipStartTime(clip: Clip, allClips: Clip[]): number {
   const clipIndex = trackClips.findIndex(c => c.id === clip.id);
   if (clipIndex === -1) return 0;
   
-  // Sum durations of all clips before this one in the same track
+  // Sum trimmed durations of all clips before this one in the same track
   let startTime = 0;
   for (let i = 0; i < clipIndex; i++) {
-    startTime += trackClips[i].duration;
+    const trimmedDuration = (trackClips[i].outPoint || trackClips[i].duration) - (trackClips[i].inPoint || 0);
+    startTime += trimmedDuration;
   }
   
   return startTime;
 }
 
 /**
- * Calculate the end time of a clip based on its start time and duration
+ * Calculate the end time of a clip based on its start time and trimmed duration
  */
 export function calculateClipEndTime(clip: Clip, allClips: Clip[]): number {
   const startTime = calculateClipStartTime(clip, allClips);
-  return startTime + clip.duration;
+  const trimmedDuration = (clip.outPoint || clip.duration) - (clip.inPoint || 0);
+  return startTime + trimmedDuration;
 }
 
 /**
