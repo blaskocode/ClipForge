@@ -28,7 +28,7 @@ import { processVideoFile } from "./utils/videoProcessing";
 import { saveProject, loadProject, createNewProject } from "./utils/projectManagement";
 import { handleZoomIn, handleZoomOut, handleZoomToFit } from "./utils/zoomControls";
 import { handleVolumeChange, handleMuteToggle } from "./utils/audioControls";
-import { findActiveClipAtTime, calculateLocalTimeInClip } from "./utils/timelineCalculations";
+import { findActiveClipAtTime } from "./utils/timelineCalculations";
 import { splitClipAtPlayhead } from "./utils/clipSplitting";
 import { setApiKey } from "./utils/apiKeyManager";
 import { FillerWord } from "./types";
