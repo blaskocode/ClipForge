@@ -1,0 +1,179 @@
+/* API Key Modal Styles */
+
+.api-key-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.api-key-modal {
+  background: #2a2a2a;
+  border-radius: 8px;
+  padding: 0;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.api-key-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #444;
+  background: #333;
+}
+
+.api-key-header h2 {
+  margin: 0;
+  color: #4a90e2;
+  font-size: 20px;
+}
+
+.api-key-header .close-button {
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.api-key-header .close-button:hover {
+  background: #444;
+  color: #fff;
+}
+
+.api-key-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.api-key-content > p {
+  margin: 0;
+  color: #ddd;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.api-key-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.api-key-input-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.api-key-input-group input {
+  padding: 10px 12px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  transition: border-color 0.2s;
+}
+
+.api-key-input-group input:hover {
+  border-color: #666;
+}
+
+.api-key-input-group input:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.error-message {
+  color: #ff4444;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.api-key-info {
+  padding: 12px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  border: 1px solid #333;
+}
+
+.api-key-info p {
+  margin: 0 0 8px 0;
+  color: #999;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.api-key-info p:last-child {
+  margin-bottom: 0;
+}
+
+.api-key-info a {
+  color: #4a90e2;
+  text-decoration: none;
+}
+
+.api-key-info a:hover {
+  text-decoration: underline;
+}
+
+.api-key-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid #444;
+  background: #333;
+}
+
+.cancel-button,
+.save-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cancel-button {
+  background: #444;
+  color: #fff;
+}
+
+.cancel-button:hover {
+  background: #555;
+}
+
+.save-button {
+  background: #28a745;
+  color: #fff;
+}
+
+.save-button:hover {
+  background: #218838;
+}
+

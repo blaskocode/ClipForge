@@ -1,4 +1,12 @@
 // Types and interfaces for ClipForge application
+
+export interface FillerWord {
+  word: string;
+  startTime: number;  // seconds
+  endTime: number;
+  confidence?: number;
+}
+
 export interface Clip {
   id: string;
   path: string;
@@ -14,6 +22,8 @@ export interface Clip {
   track: 'main' | 'pip';
   sourceOffset?: number; // For split clips: offset into the source file where this clip starts
   fileSize?: number; // File size in bytes (optional for backward compatibility)
+  fillerWords?: FillerWord[];  // Detected filler words
+  fillerDetectionStatus?: 'idle' | 'processing' | 'complete' | 'error';
   pipSettings?: {
     x: number;      // 0-1 (percentage of main video width)
     y: number;      // 0-1 (percentage of main video height)

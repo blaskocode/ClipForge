@@ -7,9 +7,11 @@ use serde::{Deserialize, Serialize};
 
 mod thumbnails;
 mod export;
+mod filler_detection;
 
 use thumbnails::extract_thumbnails;
 use export::{export_video, export_multi_track_video};
+use filler_detection::detect_filler_words;
 
 #[tauri::command]
 async fn validate_video_file(file_path: String) -> Result<String, String> {
@@ -223,7 +225,7 @@ pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: Stri
     let output = std::process::Command::new(&ffprobe_path)
         .args(&[
             "-v", "error",
-            "-show_entries", "format=duration:stream=codec_type,codec_name,width,height",
+            "-show_entries", "format=duration:stream=codec_type,codec_name,width,height,duration",
             "-of", "json",
             &file_path
         ])
@@ -241,21 +243,172 @@ pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: Stri
     let parsed: serde_json::Value = serde_json::from_str(&json_output)
         .map_err(|e| format!("Failed to parse FFprobe output: {}", e))?;
     
-    // Try to get duration - WebM files might need different parsing
-    // FFprobe can return duration as a string or number, and format might be different
+    let streams = parsed["streams"]
+        .as_array()
+        .ok_or("No streams found")?;
+    
+    // Try to get duration - WebM files might have empty format object
+    // Try multiple locations: format.duration, stream durations
     let duration = parsed["format"]["duration"]
         .as_str()
         .and_then(|s| s.parse::<f64>().ok())
         .or_else(|| parsed["format"]["duration"].as_f64())
+        .or_else(|| {
+            // Fallback: try to get duration from video stream
+            streams
+                .iter()
+                .find(|s| s["codec_type"] == "video")
+                .and_then(|s| {
+                    s["duration"]
+                        .as_str()
+                        .and_then(|d| d.parse::<f64>().ok())
+                        .or_else(|| s["duration"].as_f64())
+                })
+        })
+        .or_else(|| {
+            // Fallback: try to get duration from any stream
+            streams
+                .iter()
+                .find_map(|s| {
+                    s["duration"]
+                        .as_str()
+                        .and_then(|d| d.parse::<f64>().ok())
+                        .or_else(|| s["duration"].as_f64())
+                })
+        })
+        .or_else(|| {
+            // Last resort: try FFprobe with probesize/analyzeduration to force analysis
+            // WebM files from MediaRecorder might need explicit probing
+            std::process::Command::new(&ffprobe_path)
+                .args(&[
+                    "-v", "error",
+                    "-probesize", "100000000",  // 100MB probe size
+                    "-analyzeduration", "100000000",  // 100MB analysis
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    &file_path
+                ])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    let output = String::from_utf8(o.stdout).ok()?;
+                    output.trim().parse::<f64>().ok()
+                })
+        })
+        .or_else(|| {
+            // Fallback: use FFmpeg to estimate duration from file analysis
+            // This reads more of the file to calculate duration
+            eprintln!("Attempting FFmpeg duration extraction for: {}", file_path);
+            let ffmpeg_path = match get_ffmpeg_path() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("Failed to get FFmpeg path: {}", e);
+                    return None;
+                }
+            };
+            
+            // Use FFmpeg with -i to get file info without processing
+            let output = match std::process::Command::new(&ffmpeg_path)
+                .args(&[
+                    "-i", &file_path,
+                    "-f", "null",
+                    "-"
+                ])
+                .stderr(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .output()
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!("FFmpeg command failed: {}", e);
+                    return None;
+                }
+            };
+            
+            let stderr = match String::from_utf8(output.stderr) {
+                Ok(s) => {
+                    eprintln!("FFmpeg stderr (first 1000 chars): {}", 
+                        if s.len() > 1000 { &s[..1000] } else { &s });
+                    s
+                },
+                Err(e) => {
+                    eprintln!("Failed to parse FFmpeg stderr: {}", e);
+                    return None;
+                }
+            };
+            
+            // FFmpeg outputs duration like "Duration: 00:01:23.45, start: ..."
+            for line in stderr.lines() {
+                eprintln!("Checking line: {}", line);
+                if line.contains("Duration:") || line.contains("duration") {
+                    eprintln!("Found Duration line: {}", line);
+                    // Extract duration: "Duration: 00:01:23.45"
+                    let dur_line = if line.contains("Duration:") {
+                        line.split("Duration:").nth(1)
+                    } else {
+                        line.split("duration:").nth(1)
+                    };
+                    
+                    if let Some(dur_part) = dur_line {
+                        if let Some(time_part) = dur_part.split(',').next() {
+                            let time_part = time_part.trim();
+                            eprintln!("Parsing time part: '{}'", time_part);
+                            // Parse HH:MM:SS.mmm format
+                            let parts: Vec<&str> = time_part.split(':').collect();
+                            if parts.len() == 3 {
+                                match (parts[0].parse::<f64>(), parts[1].parse::<f64>(), parts[2].parse::<f64>()) {
+                                    (Ok(hours), Ok(minutes), Ok(seconds)) => {
+                                        let total_seconds = hours * 3600.0 + minutes * 60.0 + seconds;
+                                        eprintln!("Successfully extracted duration: {} seconds", total_seconds);
+                                        return Some(total_seconds);
+                                    },
+                                    _ => {
+                                        eprintln!("Failed to parse time components");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            eprintln!("No Duration found in FFmpeg header output");
+            
+            // Since FFmpeg shows "Duration: N/A", we need to decode through the file
+            // This is slow but necessary for MediaRecorder WebM files
+            eprintln!("Attempting to calculate duration by decoding entire file (this may take a moment)...");
+            
+            // Use ffprobe to read through all packets and find the last timestamp
+            let decode_output = std::process::Command::new(&ffprobe_path)
+                .args(&[
+                    "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "packet=pts_time",
+                    "-of", "csv=p=0",
+                    &file_path
+                ])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok());
+            
+            if let Some(csv_output) = decode_output {
+                // Find the maximum PTS time (last frame timestamp)
+                let max_time = csv_output
+                    .lines()
+                    .filter_map(|line| line.trim().parse::<f64>().ok())
+                    .fold(0.0f64, f64::max);
+                
+                if max_time > 0.0 {
+                    eprintln!("Calculated duration from packet timestamps: {} seconds", max_time);
+                    return Some(max_time);
+                }
+            }
+            
+            None
+        })
         .ok_or_else(|| {
-            // Log the actual JSON structure for debugging WebM files
             eprintln!("FFprobe JSON output for {}:\n{}", file_path, json_output);
-            format!("Could not parse duration from format. JSON structure: {}", json_output)
+            format!("Could not parse duration from format or streams. JSON structure: {}", json_output)
         })?;
-    
-    let streams = parsed["streams"]
-        .as_array()
-        .ok_or("No streams found")?;
     
     let video_stream = streams
         .iter()
@@ -394,7 +547,8 @@ pub fn run() {
             extract_thumbnails,
             save_project,
             load_project,
-            save_recording
+            save_recording,
+            detect_filler_words
             // Commands will be added in future PRs:
             // - check_codec_compatibility
         ])

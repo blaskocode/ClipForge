@@ -13,6 +13,8 @@ import { ZoomControls } from "./components/ZoomControls";
 import { RecordingModal } from "./components/RecordingModal";
 import { MediaLibrary } from "./components/MediaLibrary";
 import { ExportSettingsModal, ExportResolution } from "./components/ExportSettingsModal";
+import { FillerWordsPanel } from "./components/FillerWordsPanel";
+import { ApiKeyModal } from "./components/ApiKeyModal";
 import { invoke } from "@tauri-apps/api/core";
 import { Toast, showSuccessToast, showErrorToast, TOAST_MESSAGES } from "./utils/toastHelpers";
 import { useHistory, HistoryState } from "./hooks/useHistory";
@@ -28,6 +30,8 @@ import { handleZoomIn, handleZoomOut, handleZoomToFit } from "./utils/zoomContro
 import { handleVolumeChange, handleMuteToggle } from "./utils/audioControls";
 import { findActiveClipAtTime, calculateLocalTimeInClip } from "./utils/timelineCalculations";
 import { splitClipAtPlayhead } from "./utils/clipSplitting";
+import { setApiKey } from "./utils/apiKeyManager";
+import { FillerWord } from "./types";
 import "./App.css";
 
 function App() {
@@ -67,6 +71,7 @@ function App() {
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const [libraryClips, setLibraryClips] = useState<Clip[]>([]); // Media library clips (not on timeline)
   const [showExportSettings, setShowExportSettings] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
   // Toast system
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -487,6 +492,28 @@ function App() {
   const handleMuteToggleAction = (clipId: string, muted: boolean) => 
     handleMuteToggle(clipId, muted, audioHandlers);
 
+  // Handle filler word detection
+  const handleDetectFillerWords = (clipId: string, fillerWords: FillerWord[]) => {
+    pushState({
+      clips: clips.map(clip => 
+        clip.id === clipId 
+          ? { 
+              ...clip, 
+              fillerWords, 
+              fillerDetectionStatus: 'complete' as const 
+            }
+          : clip
+      ),
+      selectedClipId,
+    });
+    
+    addToast(showSuccessToast(
+      fillerWords.length > 0 
+        ? `Detected ${fillerWords.length} filler word${fillerWords.length !== 1 ? 's' : ''}`
+        : 'No filler words detected'
+    ));
+  };
+
   // Keyboard handler setup
   useEffect(() => {
     const keyboardHandlers = {
@@ -596,6 +623,12 @@ function App() {
           onSetInPoint={handleSetInPoint}
           onSetOutPoint={handleSetOutPoint}
         />
+        <FillerWordsPanel
+          selectedClip={clips.find(c => c.id === selectedClipId) || null}
+          onSeek={updatePlayheadPosition}
+          onDetect={handleDetectFillerWords}
+          onApiKeyRequired={() => setShowApiKeyModal(true)}
+        />
         <ZoomControls
           zoomLevel={zoomLevel}
           onZoomChange={(level: number) => setZoomLevel(level)}
@@ -693,6 +726,16 @@ function App() {
           await handleExport(width, height);
         }}
         clips={clips}
+      />
+
+      {/* API Key Modal */}
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        onSave={(apiKey) => {
+          setApiKey(apiKey);
+          addToast(showSuccessToast('API key saved'));
+        }}
       />
 
       {/* Toast Container */}

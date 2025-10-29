@@ -514,6 +514,46 @@ export function Timeline({
             />
           )}
           
+          {/* Filler word markers */}
+          {clip.fillerWords && clip.fillerWords.length > 0 && clip.fillerWords.map((fillerWord, fwIndex) => {
+            // fillerWord.startTime is in absolute timeline seconds (adjusted for inPoint)
+            // clipStartX is where this clip starts on timeline (in pixels, based on trimmed durations)
+            // We need to calculate where the filler word appears within this clip's visible portion
+            
+            // Get clip's inPoint and outPoint
+            const clipInPoint = clip.inPoint || 0;
+            const clipOutPoint = clip.outPoint || clip.duration;
+            
+            // Check if filler word is within the clip's trimmed range
+            if (fillerWord.startTime >= clipInPoint && fillerWord.startTime <= clipOutPoint) {
+              // Calculate position within the visible clip
+              // Position relative to the trimmed clip start (accounting for inPoint)
+              const relativeTimeInClip = fillerWord.startTime - clipInPoint;
+              const markerLeft = relativeTimeInClip * pixelsPerSecond;
+              
+              // Only show if within visible clip bounds
+              if (markerLeft >= 0 && markerLeft <= clipWidth) {
+                return (
+                  <div
+                    key={`filler-${fwIndex}`}
+                    className="filler-word-marker"
+                    style={{
+                      left: `${markerLeft}px`,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Seek to the absolute timeline position
+                      // clipStartX is where clip starts, we add the relative position
+                      onSeek((clipStartX / pixelsPerSecond) + relativeTimeInClip);
+                    }}
+                    title={`${fillerWord.word} at ${fillerWord.startTime.toFixed(2)}s`}
+                  />
+                );
+              }
+            }
+            return null;
+          })}
+
           {/* Out-point trim handle */}
           {(clip.outPoint || clip.duration) < clip.duration && (
             <div

@@ -557,8 +557,8 @@ export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, pla
                 className="pip-video"
                 style={{
                   position: 'absolute',
-                  bottom: '20px',
-                  right: '20px',
+                  bottom: '0px',
+                  right: '0px',
                   width: '25%',
                   maxWidth: '300px',
                   height: 'auto',

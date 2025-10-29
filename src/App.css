@@ -7,6 +7,8 @@
 @import './styles/export.css';
 @import './styles/media-library.css';
 @import './styles/export-settings.css';
+@import './styles/api-key-modal.css';
+@import './styles/filler-words-panel.css';
 
 * {
   margin: 0;

@@ -221,6 +221,24 @@
   background: #e0534f;
 }
 
+/* Filler Word Markers */
+.filler-word-marker {
+  position: absolute;
+  top: -8px;
+  width: 4px;
+  height: 14px;
+  background: #ff4444;
+  cursor: pointer;
+  z-index: 15;
+  border-radius: 2px;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.filler-word-marker:hover {
+  background: #ff6666;
+  transform: scaleY(1.2);
+}
+
 /* Playhead */
 .playhead {
   position: absolute;
