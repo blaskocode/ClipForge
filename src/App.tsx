@@ -15,13 +15,14 @@ import { useHistory, HistoryState } from "./hooks/useHistory";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useExport } from "./hooks/useExport";
 import { usePlaybackLoop } from "./hooks/usePlaybackLoop";
-import { ClipAtPlayhead, Clip } from "./types";
+import { Clip } from "./types";
 import { createKeyboardHandler } from "./utils/keyboardHandler";
 import { setupDragAndDrop } from "./utils/dragDrop";
 import { processVideoFile } from "./utils/videoProcessing";
 import { saveProject, loadProject, createNewProject } from "./utils/projectManagement";
 import { handleZoomIn, handleZoomOut, handleZoomToFit } from "./utils/zoomControls";
 import { handleVolumeChange, handleMuteToggle } from "./utils/audioControls";
+import { findActiveClipAtTime, calculateLocalTimeInClip } from "./utils/timelineCalculations";
 import "./App.css";
 
 function App() {
@@ -148,39 +149,36 @@ function App() {
     updatePlayheadPosition,
   });
 
-  // Utility function to find which clip the playhead is currently over
-  const getClipAtPlayhead = (position: number): ClipAtPlayhead | null => {
-    let accumulatedTime = 0;
-    
-    for (const clip of clips) {
-      const clipStart = accumulatedTime;
-      const clipEnd = accumulatedTime + clip.duration;
-      
-      if (position >= clipStart && position < clipEnd) {
-        const localTime = position - clipStart;
-        return { clip, localTime };
-      }
-      
-      accumulatedTime += clip.duration;
-    }
-    
-    return null;
-  };
-
   // Helper functions for trim point setting
   const handleSetInPoint = () => {
     const currentPlayheadPosition = playheadPositionRef.current;
-    const clipAtPlayhead = getClipAtPlayhead(currentPlayheadPosition);
-    if (clipAtPlayhead) {
-      handleTrimChange(clipAtPlayhead.clip.id, clipAtPlayhead.localTime, clipAtPlayhead.clip.outPoint);
+    
+    // Check both Main and PIP tracks for active clips
+    const activeMainClip = findActiveClipAtTime('main', currentPlayheadPosition, clips);
+    const activePipClip = findActiveClipAtTime('pip', currentPlayheadPosition, clips);
+    
+    // Prioritize Main track if both are active, otherwise use whichever is active
+    const activeClip = activeMainClip || activePipClip;
+    
+    if (activeClip) {
+      const localTime = calculateLocalTimeInClip(activeClip, currentPlayheadPosition, clips);
+      handleTrimChange(activeClip.id, localTime, activeClip.outPoint);
     }
   };
 
   const handleSetOutPoint = () => {
     const currentPlayheadPosition = playheadPositionRef.current;
-    const clipAtPlayhead = getClipAtPlayhead(currentPlayheadPosition);
-    if (clipAtPlayhead) {
-      handleTrimChange(clipAtPlayhead.clip.id, clipAtPlayhead.clip.inPoint, clipAtPlayhead.localTime);
+    
+    // Check both Main and PIP tracks for active clips
+    const activeMainClip = findActiveClipAtTime('main', currentPlayheadPosition, clips);
+    const activePipClip = findActiveClipAtTime('pip', currentPlayheadPosition, clips);
+    
+    // Prioritize Main track if both are active, otherwise use whichever is active
+    const activeClip = activeMainClip || activePipClip;
+    
+    if (activeClip) {
+      const localTime = calculateLocalTimeInClip(activeClip, currentPlayheadPosition, clips);
+      handleTrimChange(activeClip.id, activeClip.inPoint, localTime);
       setIsPlaying(false); // Stop playback when Out Point is set
     }
   };
@@ -340,7 +338,6 @@ function App() {
       <div className="video-player-area">
         {isDragging && <div className="drag-overlay">Drop videos here to import</div>}
         <VideoPlayer 
-          clipAtPlayhead={getClipAtPlayhead(playheadPosition)}
           isPlaying={isPlaying}
           onPlayPause={handlePlayPause}
           totalTimelineDuration={totalTimelineDuration}

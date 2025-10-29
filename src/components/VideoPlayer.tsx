@@ -1,25 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-
-interface Clip {
-  id: string;
-  path: string;
-  filename: string;
-  duration: number;
-  width: number;
-  height: number;
-  codec: string;
-  inPoint: number;
-  outPoint: number;
-}
-
-interface ClipAtPlayhead {
-  clip: Clip;
-  localTime: number;
-}
+import { findActiveClipAtTime, calculateLocalTimeInClip, getTrackClips } from '../utils/timelineCalculations';
+import { Clip } from '../types';
 
 interface VideoPlayerProps {
-  clipAtPlayhead: ClipAtPlayhead | null;
   isPlaying: boolean;
   onPlayPause: () => void;
   totalTimelineDuration: number;
@@ -29,14 +13,41 @@ interface VideoPlayerProps {
   onPlayheadUpdate: (position: number) => void;
 }
 
-export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimelineDuration, playheadPosition, onVideoPlayStateChange, clips, onPlayheadUpdate }: VideoPlayerProps) {
+export function VideoPlayer({ isPlaying, onPlayPause, totalTimelineDuration, playheadPosition, onVideoPlayStateChange, clips, onPlayheadUpdate }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const preloadVideoRef = useRef<HTMLVideoElement>(null);
+  const pipVideoRef = useRef<HTMLVideoElement>(null);
+  const isPlayingRef = useRef(isPlaying); // Track isPlaying in ref for clip transitions
   const [error, setError] = useState<string | null>(null);
   const [isVideoActuallyPlaying, setIsVideoActuallyPlaying] = useState(false);
+  
+  // Keep isPlayingRef in sync
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
+  // Calculate which Main clip is active at current playhead position - MEMOIZED for performance
+  const activeMainClip = useMemo(() => {
+    return findActiveClipAtTime('main', playheadPosition, clips);
+  }, [playheadPosition, clips]);
+  
+  const activePipClip = useMemo(() => {
+    return findActiveClipAtTime('pip', playheadPosition, clips);
+  }, [playheadPosition, clips]);
+  
+  // Calculate local time within the active Main clip - MEMOIZED for performance
+  const mainClipLocalTime = useMemo(() => {
+    return activeMainClip ? calculateLocalTimeInClip(activeMainClip, playheadPosition, clips) : 0;
+  }, [activeMainClip, playheadPosition, clips]);
+  
+  // Calculate local time within the active PiP clip - MEMOIZED for performance
+  const pipClipLocalTime = useMemo(() => {
+    return activePipClip ? calculateLocalTimeInClip(activePipClip, playheadPosition, clips) : 0;
+  }, [activePipClip, playheadPosition, clips]);
+  
   // Convert file path to URL for video element
-  const videoUrl = clipAtPlayhead ? convertFileSrc(clipAtPlayhead.clip.path) : "";
+  const videoUrl = activeMainClip ? convertFileSrc(activeMainClip.path) : "";
+  const pipVideoUrl = activePipClip ? convertFileSrc(activePipClip.path) : "";
   
   // Get proper MIME type for the video
   const getVideoMimeType = (path: string): string => {
@@ -53,34 +64,31 @@ export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimel
     return mimeTypes[ext] || `video/${ext}`;
   };
   
-  // Reset video play state when clip changes
+  // Reset video play state when active Main clip changes
   useEffect(() => {
     setIsVideoActuallyPlaying(false);
-  }, [clipAtPlayhead?.clip.id]);
+  }, [activeMainClip?.id]);
 
+  // Memoize main clips to prevent unnecessary recalculations
+  const mainClips = useMemo(() => getTrackClips('main', clips), [clips]);
+  
   // Preload next clip for seamless transitions
   useEffect(() => {
-    if (!clipAtPlayhead || !preloadVideoRef.current) return;
+    if (!activeMainClip || !preloadVideoRef.current) return;
     
-    // Find the next clip in the timeline
-    let nextClipIndex = -1;
-    for (let i = 0; i < clips.length; i++) {
-      if (clips[i].id === clipAtPlayhead.clip.id) {
-        nextClipIndex = i + 1;
-        break;
-      }
-    }
+    // Find the next Main clip in the timeline
+    const currentIndex = mainClips.findIndex(c => c.id === activeMainClip.id);
     
-    if (nextClipIndex < clips.length) {
-      const nextClipToPreload = clips[nextClipIndex];
+    if (currentIndex >= 0 && currentIndex < mainClips.length - 1) {
+      const nextClipToPreload = mainClips[currentIndex + 1];
       
-      // Preload the next clip's video (for faster loading, not seamless switching)
+      // Preload the next clip's video
       const preloadVideo = preloadVideoRef.current;
       const nextVideoUrl = convertFileSrc(nextClipToPreload.path);
       preloadVideo.src = nextVideoUrl;
       preloadVideo.load();
     }
-  }, [clipAtPlayhead?.clip.id, clips]);
+  }, [activeMainClip?.id, mainClips]);
 
   // Track video play/pause events for robust state management
   useEffect(() => {
@@ -105,30 +113,21 @@ export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimel
     const handleEnded = () => {
       setIsVideoActuallyPlaying(false);
       
-      // If video ended naturally, check if this is the last clip and pause
-      if (clipAtPlayhead) {
-        let isLastClip = false;
-        let nextClipIndex = -1;
+      // If video ended naturally, check if this is the last Main clip and pause
+      if (activeMainClip) {
+        const currentIndex = mainClips.findIndex(c => c.id === activeMainClip.id);
         
-        for (let i = 0; i < clips.length; i++) {
-          if (clips[i].id === clipAtPlayhead.clip.id) {
-            isLastClip = (i === clips.length - 1);
-            nextClipIndex = i + 1;
-            break;
-          }
-        }
-        
-        if (isLastClip) {
-          // Last clip - pause playback
+        if (currentIndex === mainClips.length - 1) {
+          // Last Main clip - pause playback
           onPlayPause();
-        } else if (nextClipIndex < clips.length) {
-          // Transition to next clip - move playhead slightly into next clip
-          let accumulatedTime = 0;
-          for (let i = 0; i < nextClipIndex; i++) {
-            accumulatedTime += clips[i].duration;
+        } else if (currentIndex >= 0 && currentIndex < mainClips.length - 1) {
+          // Transition to next Main clip - move playhead to start of next clip
+          // We need to calculate the actual timeline position for the next clip
+          let timelinePosition = 0;
+          for (let i = 0; i <= currentIndex; i++) {
+            timelinePosition += mainClips[i].duration;
           }
-          const nextClipStartPosition = accumulatedTime + 0.001; // Small offset to ensure we're inside the next clip
-          onPlayheadUpdate(nextClipStartPosition);
+          onPlayheadUpdate(timelinePosition + 0.001); // Small offset to ensure we're inside the next clip
         }
       }
     };
@@ -144,7 +143,7 @@ export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimel
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('ended', handleEnded);
     };
-  }, [clipAtPlayhead]);
+  }, [activeMainClip, mainClips, clips, onPlayPause, onPlayheadUpdate]);
 
   // Notify parent when video play state changes
   useEffect(() => {
@@ -155,59 +154,53 @@ export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimel
 
   // RAF loop: Sync playhead to video during playback (video is master)
   useEffect(() => {
-    if (!videoRef.current || !clipAtPlayhead || !isPlaying) return;
+    if (!videoRef.current || !activeMainClip || !isPlaying) return;
     
     let rafId: number;
     const video = videoRef.current;
     
     const syncLoop = () => {
-      if (!videoRef.current || !clipAtPlayhead) return;
+      if (!videoRef.current || !activeMainClip) return;
       
-      const clip = clipAtPlayhead.clip;
+      // Safety check: ensure video is ready
+      if (video.readyState < 2) {
+        rafId = requestAnimationFrame(syncLoop);
+        return;
+      }
       
       // During playback: video drives the playhead
       if (isVideoActuallyPlaying) {
         const videoTime = video.currentTime;
         
         // Handle trim boundaries - transition to next clip or pause
-        if (videoTime >= clip.outPoint) {
-          // Find timeline position for this out-point
-          let accumulatedTime = 0;
-          let isLastClip = false;
-          let nextClipIndex = -1;
+        if (videoTime >= activeMainClip.outPoint) {
+          // Find next Main clip
+          const currentIndex = mainClips.findIndex(c => c.id === activeMainClip.id);
           
-          for (let i = 0; i < clips.length; i++) {
-            const c = clips[i];
-            if (c.id === clip.id) {
-              // Check if this is the last clip
-              isLastClip = (i === clips.length - 1);
-              nextClipIndex = i + 1;
-              break;
-            }
-            accumulatedTime += c.duration;
-          }
-          
-          if (isLastClip) {
-            // Last clip - pause playback
+          if (currentIndex === mainClips.length - 1) {
+            // Last Main clip - pause playback
             onPlayPause();
             return;
-          } else if (nextClipIndex < clips.length) {
-            // Transition to next clip - move playhead slightly into next clip
-            const nextClipStartPosition = accumulatedTime + clip.duration + 0.001; // Small offset to ensure we're inside the next clip
-            onPlayheadUpdate(nextClipStartPosition);
+          } else if (currentIndex >= 0 && currentIndex < mainClips.length - 1) {
+            // Transition to next Main clip
+            let timelinePosition = 0;
+            for (let i = 0; i <= currentIndex; i++) {
+              timelinePosition += mainClips[i].duration;
+            }
+            onPlayheadUpdate(timelinePosition + 0.001);
             return;
           }
         }
         
         // Calculate timeline position from video currentTime
-        let accumulatedTime = 0;
-        for (const c of clips) {
-          if (c.id === clip.id) {
-            const timelinePosition = accumulatedTime + videoTime;
+        let timelinePosition = 0;
+        for (const clip of mainClips) {
+          if (clip.id === activeMainClip.id) {
+            timelinePosition += videoTime;
             onPlayheadUpdate(timelinePosition);
             break;
           }
-          accumulatedTime += c.duration;
+          timelinePosition += clip.duration;
         }
       }
       
@@ -216,72 +209,190 @@ export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimel
     
     rafId = requestAnimationFrame(syncLoop);
     return () => cancelAnimationFrame(rafId);
-  }, [clipAtPlayhead, isPlaying, isVideoActuallyPlaying, clips, onPlayheadUpdate]);
+  }, [activeMainClip, isPlaying, isVideoActuallyPlaying, mainClips, onPlayheadUpdate, onPlayPause]);
 
   // Handle play/pause commands and seeking
   useEffect(() => {
-    if (!videoRef.current || !clipAtPlayhead) return;
+    if (!videoRef.current || !activeMainClip) return;
     
     const video = videoRef.current;
-    const clip = clipAtPlayhead.clip;
     
-    // Clamp target time to active range
-    const targetTime = Math.max(clip.inPoint, Math.min(clipAtPlayhead.localTime, clip.outPoint));
-    const drift = Math.abs(video.currentTime - targetTime);
-    
-    // Only seek if drift is significant (manual scrub or clip change)
-    // This prevents seeking during normal playback
-    if (drift > 0.2) {
-      video.currentTime = targetTime;
+    // Only seek if video is ready and we need to correct drift
+    if (video.readyState >= 2) {
+      // Clamp target time to active range
+      const targetTime = Math.max(activeMainClip.inPoint, Math.min(mainClipLocalTime, activeMainClip.outPoint));
+      const drift = Math.abs(video.currentTime - targetTime);
+      
+      // Only seek if drift is significant (manual scrub or clip change)
+      // This prevents seeking during normal playback
+      if (drift > 0.2) {
+        console.log('Seeking main video to', targetTime);
+        video.currentTime = targetTime;
+      }
     }
     
-    // Handle play/pause state
+    // Handle play/pause state (browser will queue play() if video not ready yet)
     if (isPlaying && video.paused) {
+      console.log('Starting main video playback (readyState:', video.readyState, ')');
       video.play().catch(err => {
-        console.error("Failed to play:", err);
-        setError(`Failed to play video: ${err.message}`);
+        console.log("Main play promise rejected (this is normal):", err.message);
       });
     } else if (!isPlaying && !video.paused) {
+      console.log('Pausing main video');
       video.pause();
     }
-  }, [clipAtPlayhead, isPlaying]);
+  }, [activeMainClip, mainClipLocalTime, isPlaying]);
 
-  // Handle video source changes during playback (for clip transitions)
+  // Handle video source changes (for clip transitions)
   useEffect(() => {
-    if (!videoRef.current || !clipAtPlayhead) return;
+    if (!videoRef.current || !activeMainClip) return;
     
     const video = videoRef.current;
-    const clip = clipAtPlayhead.clip;
     
-    // When clip changes, we need to ensure the video loads the new source
-    if (clipAtPlayhead) {
-      // Force reload the video source to ensure it's the correct clip
-      video.load();
-      
-      // After the video loads, seek to the correct position and start playing
-      const handleLoadedData = () => {
-        // Seek to the correct local time for this clip
-        const targetTime = Math.max(clip.inPoint, Math.min(clipAtPlayhead.localTime, clip.outPoint));
-        video.currentTime = targetTime;
-        
-        // If we're playing, start playback immediately
-        if (isPlaying) {
-          // Use a small timeout to ensure the seek has completed
-          setTimeout(() => {
-            video.play().catch(err => {
-              console.error("Failed to play after clip transition:", err);
-              setError(`Failed to play video: ${err.message}`);
-            });
-          }, 10); // 10ms delay to ensure seek completes
-        }
-        
-        // Remove the event listener after use
-        video.removeEventListener('loadeddata', handleLoadedData);
-      };
-      
-      video.addEventListener('loadeddata', handleLoadedData);
+    console.log('Loading new main clip:', activeMainClip.filename, '(should resume:', isPlayingRef.current, ')');
+    
+    // Pause first to avoid AbortError when calling load()
+    if (!video.paused) {
+      video.pause();
     }
-  }, [clipAtPlayhead?.clip.id, isPlaying]);
+    
+    // Load the new video source (React changed the <source> src, now reload the video element)
+    video.load();
+    
+    // When video is ready, seek to position and resume playback if needed
+    const syncVideoPosition = () => {
+      console.log('Main clip loaded, seeking to position');
+      const targetTime = Math.max(activeMainClip.inPoint, Math.min(mainClipLocalTime, activeMainClip.outPoint));
+      video.currentTime = targetTime;
+      
+      // Resume playback if we were playing before the clip change (use ref for current state)
+      if (isPlayingRef.current) {
+        console.log('Resuming main video playback after clip transition');
+        video.play().catch(err => {
+          console.log("Main play after transition deferred:", err.message);
+        });
+      }
+    };
+    
+    video.addEventListener('loadedmetadata', syncVideoPosition, { once: true });
+    
+    return () => {
+      video.removeEventListener('loadedmetadata', syncVideoPosition);
+    };
+  }, [activeMainClip?.id]); // Only when clip ID changes - use ref for play state!
+
+  // Handle PiP video source changes (for clip transitions)
+  useEffect(() => {
+    if (!pipVideoRef.current) return;
+    
+    const pipVideo = pipVideoRef.current;
+    
+    // No active PiP clip - pause and hide
+    if (!activePipClip) {
+      if (!pipVideo.paused) {
+        pipVideo.pause();
+      }
+      return;
+    }
+    
+    console.log('Loading new PiP clip:', activePipClip.filename, '(should resume:', isPlayingRef.current, ')');
+    
+    // Pause first to avoid AbortError when calling load()
+    if (!pipVideo.paused) {
+      pipVideo.pause();
+    }
+    
+    // Load the new video source
+    pipVideo.load();
+    
+    // When video is ready, seek to position and resume playback if needed
+    const handleLoadedMetadata = () => {
+      console.log('PiP clip loaded, seeking to position');
+      const targetTime = Math.max(
+        activePipClip.inPoint,
+        Math.min(pipClipLocalTime, activePipClip.outPoint)
+      );
+      pipVideo.currentTime = targetTime;
+      
+      // Resume playback if we were playing before the clip change (use ref for current state)
+      if (isPlayingRef.current) {
+        console.log('Resuming PiP video playback after clip transition');
+        pipVideo.play().catch(err => {
+          console.log("PiP play after transition deferred:", err.message);
+        });
+      }
+    };
+    
+    pipVideo.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+    
+    return () => {
+      pipVideo.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [activePipClip?.id]); // Only when clip ID changes - use ref for play state!
+
+  // Handle PiP play/pause state separately (less aggressive)
+  useEffect(() => {
+    if (!pipVideoRef.current || !activePipClip) return;
+    
+    const pipVideo = pipVideoRef.current;
+    
+    // Only sync play/pause if video is ready
+    if (pipVideo.readyState < 2) return;
+    
+    if (isPlaying && pipVideo.paused) {
+      pipVideo.play().catch(err => {
+        console.log("PiP play deferred:", err.message);
+      });
+    } else if (!isPlaying && !pipVideo.paused) {
+      pipVideo.pause();
+    }
+  }, [isPlaying, activePipClip]);
+
+  // Handle manual seeking - sync PiP to new playhead position
+  useEffect(() => {
+    if (!pipVideoRef.current || !activePipClip || isPlaying) return;
+    
+    const pipVideo = pipVideoRef.current;
+    if (pipVideo.readyState < 2) return;
+    
+    // When playhead is manually moved (and not playing), update PiP position
+    const targetTime = Math.max(
+      activePipClip.inPoint,
+      Math.min(pipClipLocalTime, activePipClip.outPoint)
+    );
+    const drift = Math.abs(pipVideo.currentTime - targetTime);
+    
+    // Only seek if drift is significant
+    if (drift > 0.5) {
+      pipVideo.currentTime = targetTime;
+    }
+  }, [pipClipLocalTime, activePipClip, isPlaying]);
+
+  // Gentle drift correction during playback - check every 500ms instead of every frame
+  useEffect(() => {
+    if (!pipVideoRef.current || !activePipClip || !isPlaying || !isVideoActuallyPlaying) return;
+    
+    const pipVideo = pipVideoRef.current;
+    
+    const driftCheckInterval = setInterval(() => {
+      if (pipVideo.readyState < 2) return;
+      
+      const targetTime = Math.max(
+        activePipClip.inPoint,
+        Math.min(pipClipLocalTime, activePipClip.outPoint)
+      );
+      const drift = Math.abs(pipVideo.currentTime - targetTime);
+      
+      // Only seek if drift is very significant (>1 second)
+      // This prevents constant seeking but keeps videos roughly in sync
+      if (drift > 1.0) {
+        console.log(`PiP drift correction: ${drift.toFixed(2)}s`);
+        pipVideo.currentTime = targetTime;
+      }
+    }, 500); // Check every 500ms instead of every frame
+    
+    return () => clearInterval(driftCheckInterval);
+  }, [activePipClip, pipClipLocalTime, isPlaying, isVideoActuallyPlaying]);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -345,36 +456,93 @@ export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimel
     }, 5000);
   };
 
-  // Reset error when clip changes
+  // Reset error when active Main clip changes
   useEffect(() => {
     setError(null);
-  }, [clipAtPlayhead?.clip.id]);
+  }, [activeMainClip?.id]);
 
   const hasClips = totalTimelineDuration > 0;
 
   return (
     <div className="video-player">
       {/* Video Preview - always show if there are clips on timeline */}
-      {clipAtPlayhead && (
+      {hasClips && (
         <>
-          <video
-            ref={videoRef}
-            onError={handleVideoError}
-            onLoadedMetadata={() => console.log("Video metadata loaded successfully")}
-            preload="metadata"
-            playsInline
-            style={{
-              width: "auto",
-              height: "auto",
-              maxWidth: "100%",
-              maxHeight: "calc(100% - 120px)", // Reserve space for controls + hints
-              background: "#000",
-              objectFit: "contain",
-            }}
-          >
-            <source src={videoUrl} type={getVideoMimeType(clipAtPlayhead.clip.path)} />
-            Your browser does not support the video tag.
-          </video>
+          <div className="video-preview-container" style={{ 
+            position: 'relative', 
+            width: '100%',
+            height: '100%',
+            maxHeight: 'calc(100vh - 300px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#000',
+          }}>
+            {/* Main video - visible, hardware accelerated, fills entire preview area */}
+            {activeMainClip && (
+              <video
+                ref={videoRef}
+                onError={handleVideoError}
+                onLoadedMetadata={() => console.log("Video metadata loaded successfully")}
+                preload="metadata"
+                playsInline
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  background: '#000',
+                }}
+              >
+                <source src={videoUrl} type={getVideoMimeType(activeMainClip.path)} />
+                Your browser does not support the video tag.
+              </video>
+            )}
+            
+            {/* Black background when no main clip is active */}
+            {!activeMainClip && (
+              <div style={{
+                width: '100%',
+                height: '100%',
+                background: '#000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#666',
+                fontSize: '18px',
+              }}>
+                No main video
+              </div>
+            )}
+            
+            {/* PiP video overlay - visible, hardware accelerated, positioned in lower right corner */}
+            {activePipClip && (
+              <video
+                ref={pipVideoRef}
+                preload="metadata"
+                playsInline
+                muted
+                className="pip-video"
+                style={{
+                  position: 'absolute',
+                  bottom: '20px',
+                  right: '20px',
+                  width: '25%',
+                  maxWidth: '300px',
+                  height: 'auto',
+                  aspectRatio: '16/9',
+                  border: '2px solid rgba(255,255,255,0.5)',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+                  objectFit: 'contain',
+                  background: '#000',
+                  willChange: 'transform',
+                  transform: 'translateZ(0)',
+                  zIndex: 10,
+                }}
+              >
+                <source src={pipVideoUrl} type={getVideoMimeType(activePipClip.path)} />
+              </video>
+            )}
+          </div>
           
           {error && (
             <div className="video-error">
@@ -382,7 +550,7 @@ export function VideoPlayer({ clipAtPlayhead, isPlaying, onPlayPause, totalTimel
             </div>
           )}
           
-          {/* Hidden preload video for seamless transitions */}
+          {/* Hidden preload video for seamless main track transitions */}
           <video
             ref={preloadVideoRef}
             preload="auto"

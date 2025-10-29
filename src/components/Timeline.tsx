@@ -1,22 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { ClipThumbnails } from './ClipThumbnails';
-import { reorderClips, canReorderClips, calculateDropIndex, calculateDropIndicatorPosition, createDragImage, cleanupDragImage, calculateSnapZones, findNearestSnapZone, calculateDropIndexFromSnapZone, SnapZone } from '../utils/clipDragDrop';
+import { reorderClips, canReorderClips, calculateDropIndex, calculateDropIndicatorPosition, createDragImage, cleanupDragImage, calculateSnapZones, findNearestSnapZone, SnapZone } from '../utils/clipDragDrop';
+import { Clip } from '../types';
 
 const PIXELS_PER_SECOND = 50;
-
-interface Clip {
-  id: string;
-  path: string;
-  filename: string;
-  duration: number;
-  width: number;
-  height: number;
-  codec: string;
-  inPoint: number;
-  outPoint: number;
-  volume: number;
-  muted: boolean;
-}
 
 interface TimelineProps {
   clips: Clip[];
@@ -63,15 +50,63 @@ export function Timeline({
 
   const pixelsPerSecond = PIXELS_PER_SECOND * zoomLevel;
 
+  // Separate clips by track
+  const mainTrackClips = clips.filter(clip => clip.track === 'main');
+  const pipTrackClips = clips.filter(clip => clip.track === 'pip');
+  
   const totalDuration = clips.reduce((sum, clip) => sum + clip.duration, 0);
+  
+  // Calculate drop indicator position based on current drop index
+  const calculateDropIndicator = () => {
+    if (!draggedClipId || dropIndicatorIndex === null) return null;
+    
+    const draggedClip = clips.find(c => c.id === draggedClipId);
+    if (!draggedClip) return null;
+    
+    const targetTrackClips = clips.filter(clip => clip.track === draggedClip.track);
+    const clipsWithoutDragged = targetTrackClips.filter(clip => clip.id !== draggedClipId);
+    
+    if (clipsWithoutDragged.length === 0) {
+      // Only one clip, show indicator at beginning
+      return { position: 0, type: 'beginning' };
+    }
+    
+    // Calculate position based on drop index
+    let cumulativeTime = 0;
+    
+    if (dropIndicatorIndex === 0) {
+      return { position: 0, type: 'beginning' };
+    }
+    
+    // Find the position after the clip at dropIndex - 1
+    for (let i = 0; i < dropIndicatorIndex && i < clipsWithoutDragged.length; i++) {
+      cumulativeTime += clipsWithoutDragged[i].duration;
+    }
+    
+    return { position: cumulativeTime * pixelsPerSecond, type: 'between' };
+  };
+
+  const dropIndicator = calculateDropIndicator();
 
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!timelineRef.current) return;
+    // Check if click is on a track row (not on track labels)
+    const target = e.target as HTMLElement;
+    if (target.closest('.track-label') || target.closest('.time-offset')) {
+      return; // Don't handle clicks on track labels
+    }
     
-    const rect = timelineRef.current.getBoundingClientRect();
+    // Don't handle clicks on clips
+    if (target.closest('.timeline-clip')) {
+      return;
+    }
+    
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
     const clickX = e.clientX - rect.left;
     
-    const adjustedClickX = Math.max(0, clickX);
+    // Adjust for 80px track label offset
+    const adjustedClickX = Math.max(0, clickX - 80);
     
     const timePosition = adjustedClickX / pixelsPerSecond;
     
@@ -79,7 +114,6 @@ export function Timeline({
     
     const clampedTimePosition = Math.min(Math.max(0, timePosition), maxDuration);
     
-    console.log(`Timeline clicked: x=${clickX}, time=${timePosition}, clamped=${clampedTimePosition}`);
     onClipDeselect();
     onSeek(clampedTimePosition);
   };
@@ -243,12 +277,14 @@ export function Timeline({
     
     setDraggedClipId(clipId);
     
-    // Calculate snap zones for professional positioning
+    // Calculate snap zones for all clips (for cross-track snapping)
     const zones = calculateSnapZones(clips, clipId, pixelsPerSecond);
     setSnapZones(zones);
     
-    const clip = clips.find(c => c.id === clipId);
-    const dragImage = createDragImage(clip?.filename || 'Clip');
+    const draggedClip = clips.find(c => c.id === clipId);
+    if (!draggedClip) return;
+    
+    const dragImage = createDragImage(draggedClip.filename || 'Clip');
     document.body.appendChild(dragImage);
     e.dataTransfer.setDragImage(dragImage, 0, 0);
     
@@ -256,43 +292,87 @@ export function Timeline({
     e.currentTarget.classList.add('dragging');
   };
 
-  const handleClipDragOver = (e: React.DragEvent, targetClipId: string) => {
+  const handleTrackDragOver = (e: React.DragEvent, trackType: 'main' | 'pip') => {
     e.preventDefault();
     
-    if (!draggedClipId || draggedClipId === targetClipId) return;
+    if (!draggedClipId) return;
     
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect) return;
     
     const mouseX = e.clientX - rect.left;
     
-    // Find nearest snap zone
-    const nearestSnapZone = findNearestSnapZone(mouseX, snapZones, 20);
+    // Get clips for the target track
+    const targetTrackClips = clips.filter(clip => clip.track === trackType);
     
+    // Calculate drop index within the target track
+    let dropIndex;
+    try {
+      dropIndex = calculateDropIndex(targetTrackClips, draggedClipId, mouseX - 80, pixelsPerSecond);
+    } catch (error) {
+      dropIndex = null;
+    }
+    
+    setDropIndicatorIndex(dropIndex);
+    
+    // Find nearest snap zone
+    const nearestSnapZone = findNearestSnapZone(mouseX - 80, snapZones, 20);
     if (nearestSnapZone) {
       setActiveSnapZone(nearestSnapZone);
-      const dropIndex = calculateDropIndexFromSnapZone(clips, draggedClipId, nearestSnapZone);
-      setDropIndicatorIndex(dropIndex);
     } else {
       setActiveSnapZone(null);
-      // Fallback to original behavior
-      const dropIndex = calculateDropIndex(clips, draggedClipId, mouseX, pixelsPerSecond);
-      setDropIndicatorIndex(dropIndex);
     }
   };
 
-  const handleClipDrop = (e: React.DragEvent) => {
+  const handleClipDrop = (e: React.DragEvent, targetTrack: 'main' | 'pip') => {
     e.preventDefault();
     
-    if (!draggedClipId || dropIndicatorIndex === null) return;
+    if (!draggedClipId) return;
     
-    if (!canReorderClips(clips, draggedClipId, dropIndicatorIndex)) {
-      handleClipDragEnd();
-      return;
+    const draggedClip = clips.find(c => c.id === draggedClipId);
+    if (!draggedClip) return;
+    
+    // Check if we're moving between tracks
+    if (draggedClip.track !== targetTrack) {
+      // Move between tracks - create new clip with updated track
+      const updatedClip = {
+        ...draggedClip,
+        track: targetTrack,
+        // Add default PIP settings if moving to PIP track
+        ...(targetTrack === 'pip' && !draggedClip.pipSettings ? {
+          pipSettings: {
+            x: 0.75,
+            y: 0.75,
+            width: 0.25,
+            height: 0.25,
+            opacity: 1.0
+          }
+        } : {}),
+        // Remove PIP settings if moving to main track
+        ...(targetTrack === 'main' ? { pipSettings: undefined } : {})
+      };
+      
+      // Update the clip in the clips array
+      const newClips = clips.map(clip => 
+        clip.id === draggedClipId ? updatedClip : clip
+      );
+      
+      onClipsReorder(newClips);
+    } else {
+      // Reorder within same track
+      const targetTrackClips = clips.filter(clip => clip.track === targetTrack);
+      
+      if (dropIndicatorIndex !== null && canReorderClips(targetTrackClips, draggedClipId, dropIndicatorIndex)) {
+        // Reorder within the same track
+        const reorderedTrackClips = reorderClips(targetTrackClips, draggedClipId, dropIndicatorIndex);
+        
+        // For same-track reordering, replace the target track clips with reordered ones
+        const allClips = clips.filter(clip => clip.track !== targetTrack).concat(reorderedTrackClips);
+        
+        onClipsReorder(allClips);
+      } else {
+      }
     }
-    
-    const newClips = reorderClips(clips, draggedClipId, dropIndicatorIndex);
-    onClipsReorder(newClips);
     
     handleClipDragEnd();
   };
@@ -334,8 +414,177 @@ export function Timeline({
 
   const timeMarkers = generateTimeMarkers();
 
+  // Helper function to render clips for a specific track
+  const renderTrackClips = (trackClips: Clip[]) => {
+    return trackClips.map((clip, idx) => {
+      // Calculate clip start position within the track (using trimmed durations)
+      const startPosition = trackClips
+        .slice(0, idx)
+        .reduce((sum, c) => sum + ((c.outPoint || c.duration) - (c.inPoint || 0)), 0);
+      
+      // Calculate trimmed duration (what actually plays)
+      const trimmedDuration = (clip.outPoint || clip.duration) - (clip.inPoint || 0);
+      const clipWidth = trimmedDuration * pixelsPerSecond;
+      const clipStartX = startPosition * pixelsPerSecond;
+      
+      // Calculate trim overlay positions (relative to full clip duration)
+      const fullClipWidth = clip.duration * pixelsPerSecond;
+      const inPointPixels = ((clip.inPoint || 0) / clip.duration) * fullClipWidth;
+      const outPointPixels = ((clip.outPoint || clip.duration) / clip.duration) * fullClipWidth;
+      const trimmedStartWidth = inPointPixels;
+      const trimmedEndWidth = clipWidth - outPointPixels;
+      
+      return (
+        <div
+          key={clip.id}
+          draggable={!isExporting && clips.length > 1}
+          onDragStart={(e) => handleClipDragStart(e, clip.id)}
+          onDragEnd={handleClipDragEnd}
+          className={`timeline-clip ${selectedClipId === clip.id ? 'selected' : ''} ${draggedClipId === clip.id ? 'dragging' : ''}`}
+          data-track={clip.track}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClipSelect(clip.id);
+          }}
+          style={{
+            left: `${clipStartX}px`,
+            width: `${clipWidth}px`,
+            cursor: isExporting ? 'not-allowed' : 'grab',
+            transition: draggedClipId ? 'none' : 'left 0.2s ease',
+          }}
+        >
+          <span className="clip-name">{clip.filename}</span>
+          <button
+            className="clip-delete-button"
+            onClick={(e) => handleDeleteClick(clip.id, e)}
+            title="Delete clip"
+          >
+            ×
+          </button>
+          
+          {/* Trim overlay - before in-point */}
+          {(clip.inPoint || 0) > 0 && (
+            <div
+              className="trim-overlay"
+              style={{
+                left: 0,
+                width: `${trimmedStartWidth}px`,
+              }}
+            />
+          )}
+          
+          {/* Trim overlay - after out-point */}
+          {(clip.outPoint || clip.duration) < clip.duration && (
+            <div
+              className="trim-overlay"
+              style={{
+                left: `${outPointPixels}px`,
+                width: `${trimmedEndWidth}px`,
+              }}
+            />
+          )}
+          
+          {/* In-point trim handle */}
+          {(clip.inPoint || 0) > 0 && (
+            <div
+              className="trim-handle in-point"
+              style={{
+                left: `${inPointPixels}px`,
+              }}
+              title={`In Point: ${(clip.inPoint || 0).toFixed(2)}s`}
+            />
+          )}
+          
+          {/* Out-point trim handle */}
+          {(clip.outPoint || clip.duration) < clip.duration && (
+            <div
+              className="trim-handle out-point"
+              style={{
+                left: `${outPointPixels}px`,
+              }}
+              title={`Out Point: ${(clip.outPoint || clip.duration).toFixed(2)}s`}
+            />
+          )}
+          
+          {/* Draggable Trim Handles */}
+          {selectedClipId === clip.id && (
+            <>
+              {/* In Point Handle */}
+              <div
+                className="trim-handle trim-handle-in"
+                style={{
+                  left: `${inPointPixels}px`,
+                }}
+                onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'in')}
+                title={`In Point: ${(clip.inPoint || 0).toFixed(2)}s`}
+              />
+              
+              {/* Out Point Handle */}
+              <div
+                className="trim-handle trim-handle-out"
+                style={{
+                  left: `${outPointPixels}px`,
+                }}
+                onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'out')}
+                title={`Out Point: ${(clip.outPoint || clip.duration).toFixed(2)}s`}
+              />
+            </>
+          )}
+          
+          {/* Clip Thumbnails */}
+          <ClipThumbnails clip={clip} thumbnailCount={3} />
+        </div>
+      );
+    });
+  };
+
   return (
-    <div className="timeline-container">
+    <div 
+      ref={timelineRef}
+      className="timeline-container"
+      onDragOver={(e) => {
+        e.preventDefault();
+      }}
+    >
+      {/* Track Labels */}
+      <div className="track-label pip-label">PIP</div>
+      <div className="track-label main-label">Main</div>
+      
+      {/* Time Offset */}
+      <div className="time-offset"></div>
+      
+      {/* PIP Track */}
+      <div 
+        className="track-row pip-track"
+        onClick={handleTimelineClick}
+        onDrop={(e) => handleClipDrop(e, 'pip')}
+        onDragOver={(e) => handleTrackDragOver(e, 'pip')}
+      >
+        {pipTrackClips.length === 0 ? (
+          <div className="timeline-empty-state">
+            Drag clips here for Picture-in-Picture
+          </div>
+        ) : (
+          renderTrackClips(pipTrackClips)
+        )}
+      </div>
+      
+      {/* Main Track */}
+      <div 
+        className="track-row main-track"
+        onClick={handleTimelineClick}
+        onDrop={(e) => handleClipDrop(e, 'main')}
+        onDragOver={(e) => handleTrackDragOver(e, 'main')}
+      >
+        {mainTrackClips.length === 0 ? (
+          <div className="timeline-empty-state">
+            Import videos to get started
+          </div>
+        ) : (
+          renderTrackClips(mainTrackClips)
+        )}
+      </div>
+      
       {/* Time Ruler */}
       <div className="time-ruler">
         {timeMarkers.map((time) => (
@@ -350,18 +599,46 @@ export function Timeline({
         ))}
       </div>
 
-      {dropIndicatorIndex !== null && draggedClipId && (
+      {/* Drop Indicators */}
+      {dropIndicatorIndex !== null && draggedClipId && (() => {
+        const draggedClip = clips.find(c => c.id === draggedClipId);
+        if (!draggedClip) return null;
+        
+        // Calculate position based on the target track clips
+        const targetTrackClips = clips.filter(clip => clip.track === draggedClip.track);
+        const position = calculateDropIndicatorPosition(targetTrackClips, dropIndicatorIndex, draggedClipId, pixelsPerSecond);
+        
+        return (
+          <div
+            className="timeline-drop-indicator"
+            style={{
+              position: 'absolute',
+              left: `${position + 80}px`,
+              width: '3px',
+              background: activeSnapZone ? '#4CAF50' : '#4CAF50',
+              height: '200px',
+              pointerEvents: 'none',
+              zIndex: 10,
+              boxShadow: activeSnapZone ? '0 0 12px rgba(76, 175, 80, 1)' : '0 0 8px rgba(76, 175, 80, 0.6)',
+            }}
+          />
+        );
+      })()}
+
+      {/* Drop indicator - single line showing where clip will be inserted */}
+      {draggedClipId && dropIndicator && (
         <div
-          className="timeline-drop-indicator"
+          className="drop-indicator"
           style={{
             position: 'absolute',
-            left: `${calculateDropIndicatorPosition(clips, dropIndicatorIndex, draggedClipId, pixelsPerSecond)}px`,
+            left: `${dropIndicator.position + 80}px`,
             width: '3px',
-            background: activeSnapZone ? '#4CAF50' : '#4CAF50',
-            height: '100%',
+            height: '200px',
+            background: '#00BFFF',
             pointerEvents: 'none',
-            zIndex: 10,
-            boxShadow: activeSnapZone ? '0 0 12px rgba(76, 175, 80, 1)' : '0 0 8px rgba(76, 175, 80, 0.6)',
+            zIndex: 15,
+            boxShadow: '0 0 8px rgba(0, 191, 255, 0.8)',
+            animation: 'drop-pulse 0.8s ease-in-out infinite',
           }}
         />
       )}
@@ -372,10 +649,10 @@ export function Timeline({
           className="snap-zone-indicator"
           style={{
             position: 'absolute',
-            left: `${activeSnapZone.position}px`,
+            left: `${activeSnapZone.position + 80}px`,
             width: '2px',
             background: '#FFD700',
-            height: '100%',
+            height: '200px',
             pointerEvents: 'none',
             zIndex: 15,
             boxShadow: '0 0 8px rgba(255, 215, 0, 0.8)',
@@ -384,151 +661,15 @@ export function Timeline({
         />
       )}
 
-      {/* Timeline */}
-      <div
-        ref={timelineRef}
-        className="timeline"
-        onClick={handleTimelineClick}
-        onDrop={handleClipDrop}
-        onDragOver={(e) => {
-          e.preventDefault();
-        }}
-      >
-        {/* Render Clips */}
-        {clips.length === 0 ? (
-          <div className="timeline-empty-state">
-            No clips on timeline. Import videos to get started.
-          </div>
-        ) : (
-          clips.map((clip, idx) => {
-            // Calculate clip start position
-            const startPosition = clips
-              .slice(0, idx)
-              .reduce((sum, c) => sum + c.duration, 0);
-            
-            const clipWidth = clip.duration * pixelsPerSecond;
-            const clipStartX = startPosition * pixelsPerSecond;
-            
-            // Calculate trim overlay positions
-            const inPointPixels = ((clip.inPoint || 0) / clip.duration) * clipWidth;
-            const outPointPixels = ((clip.outPoint || clip.duration) / clip.duration) * clipWidth;
-            const trimmedStartWidth = inPointPixels;
-            const trimmedEndWidth = clipWidth - outPointPixels;
-            
-            return (
-              <div
-                key={clip.id}
-                draggable={!isExporting && clips.length > 1}
-                onDragStart={(e) => handleClipDragStart(e, clip.id)}
-                onDragOver={(e) => handleClipDragOver(e, clip.id)}
-                onDragEnd={handleClipDragEnd}
-                className={`timeline-clip ${selectedClipId === clip.id ? 'selected' : ''} ${draggedClipId === clip.id ? 'dragging' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClipSelect(clip.id);
-                }}
-                style={{
-                  left: `${clipStartX}px`,
-                  width: `${clipWidth}px`,
-                  cursor: isExporting ? 'not-allowed' : 'grab',
-                  transition: draggedClipId ? 'none' : 'left 0.2s ease',
-                }}
-              >
-                <span className="clip-name">{clip.filename}</span>
-                <button
-                  className="clip-delete-button"
-                  onClick={(e) => handleDeleteClick(clip.id, e)}
-                  title="Delete clip"
-                >
-                  ×
-                </button>
-                
-                {/* Trim overlay - before in-point */}
-                {(clip.inPoint || 0) > 0 && (
-                  <div
-                    className="trim-overlay"
-                    style={{
-                      left: 0,
-                      width: `${trimmedStartWidth}px`,
-                    }}
-                  />
-                )}
-                
-                {/* Trim overlay - after out-point */}
-                {(clip.outPoint || clip.duration) < clip.duration && (
-                  <div
-                    className="trim-overlay"
-                    style={{
-                      left: `${outPointPixels}px`,
-                      width: `${trimmedEndWidth}px`,
-                    }}
-                  />
-                )}
-                
-                {/* In-point trim handle */}
-                {(clip.inPoint || 0) > 0 && (
-                  <div
-                    className="trim-handle in-point"
-                    style={{
-                      left: `${inPointPixels}px`,
-                    }}
-                    title={`In Point: ${(clip.inPoint || 0).toFixed(2)}s`}
-                  />
-                )}
-                
-                {/* Out-point trim handle */}
-                {(clip.outPoint || clip.duration) < clip.duration && (
-                  <div
-                    className="trim-handle out-point"
-                    style={{
-                      left: `${outPointPixels}px`,
-                    }}
-                    title={`Out Point: ${(clip.outPoint || clip.duration).toFixed(2)}s`}
-                  />
-                )}
-                
-                {/* Draggable Trim Handles */}
-                {selectedClipId === clip.id && (
-                  <>
-                    {/* In Point Handle */}
-                    <div
-                      className="trim-handle trim-handle-in"
-                      style={{
-                        left: `${inPointPixels}px`,
-                      }}
-                      onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'in')}
-                      title={`In Point: ${(clip.inPoint || 0).toFixed(2)}s`}
-                    />
-                    
-                    {/* Out Point Handle */}
-                    <div
-                      className="trim-handle trim-handle-out"
-                      style={{
-                        left: `${outPointPixels}px`,
-                      }}
-                      onMouseDown={(e) => handleTrimHandleMouseDown(e, clip.id, 'out')}
-                      title={`Out Point: ${(clip.outPoint || clip.duration).toFixed(2)}s`}
-                    />
-                  </>
-                )}
-                
-                {/* Clip Thumbnails */}
-                <ClipThumbnails clip={clip} thumbnailCount={3} />
-              </div>
-            );
-          })
-        )}
-
-        {/* Playhead */}
-        {clips.length > 0 && (
-          <div
-            className="playhead"
-            style={{
-              left: `${playheadPosition * pixelsPerSecond}px`,
-            }}
-          />
-        )}
-      </div>
+      {/* Playhead */}
+      {clips.length > 0 && (
+        <div
+          className="playhead"
+          style={{
+            left: `${playheadPosition * pixelsPerSecond + 80}px`,
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -9,7 +9,7 @@ mod thumbnails;
 mod export;
 
 use thumbnails::extract_thumbnails;
-use export::export_video;
+use export::{export_video, export_multi_track_video};
 
 #[tauri::command]
 async fn validate_video_file(file_path: String) -> Result<String, String> {
@@ -358,6 +358,7 @@ pub fn run() {
             get_video_metadata,
             select_export_path,
             export_video,
+            export_multi_track_video,
             extract_thumbnails,
             save_project,
             load_project

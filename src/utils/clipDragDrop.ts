@@ -47,8 +47,8 @@ export function canReorderClips(clips: Clip[], draggedId: string, dropIndex: num
   }
   
   // Prevent no-op drags
-  // Same position or right next to current position = no change
-  if (currentIndex === dropIndex || currentIndex === dropIndex - 1) {
+  // Same position = no change
+  if (currentIndex === dropIndex) {
     return false;
   }
   
@@ -85,30 +85,49 @@ export function calculateDropIndex(
     return 0;
   }
   
+  const draggedClipIndex = clips.findIndex(clip => clip.id === draggedClipId);
+  
+  if (draggedClipIndex === -1) {
+    return clips.length; // Clip not found, drop at end
+  }
+  
+  // Create a temporary array without the dragged clip for positioning calculations
+  const clipsWithoutDragged = clips.filter(clip => clip.id !== draggedClipId);
+  
+  // Calculate cumulative positions for insertion points
   let cumulativeTime = 0;
   
-  for (let i = 0; i < clips.length; i++) {
-    const clip = clips[i];
+  // Check if we should insert at the beginning
+  if (mouseX < 20) { // 20px threshold for "beginning" insertion
+    return 0;
+  }
+  
+  // Check insertion points between clips
+  for (let i = 0; i < clipsWithoutDragged.length; i++) {
+    const clip = clipsWithoutDragged[i];
+    const clipEndTime = cumulativeTime + clip.duration;
+    const clipEndPixels = clipEndTime * pixelsPerSecond;
     
-    // Skip the dragged clip in calculations
-    if (clip.id === draggedClipId) {
-      cumulativeTime += clip.duration;
-      continue;
-    }
+    // Check if mouse is in the "insertion zone" after this clip
+    // Use a 40px zone around the end of each clip for insertion
+    const insertionZoneStart = clipEndPixels - 20;
+    const insertionZoneEnd = clipEndPixels + 20;
     
-    // Calculate midpoint of current clip
-    const clipMidpoint = (cumulativeTime + clip.duration / 2) * pixelsPerSecond;
-    
-    // If mouse is before midpoint, drop before this clip
-    if (mouseX < clipMidpoint) {
-      return i;
+    if (mouseX >= insertionZoneStart && mouseX <= insertionZoneEnd) {
+      return i + 1;
     }
     
     cumulativeTime += clip.duration;
   }
   
-  // Default: drop at end
-  return clips.length;
+  // Check if we should insert at the end
+  const totalTimelineLength = cumulativeTime * pixelsPerSecond;
+  if (mouseX > totalTimelineLength - 20) { // 20px threshold for "end" insertion
+    return clipsWithoutDragged.length;
+  }
+  
+  // Default: no valid insertion point found, return current position
+  return draggedClipIndex;
 }
 
 /**

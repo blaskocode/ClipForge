@@ -1,16 +1,5 @@
 // Export utility functions for ClipForge
-
-interface Clip {
-  id: string;
-  path: string;
-  filename: string;
-  duration: number;
-  width: number;
-  height: number;
-  codec: string;
-  inPoint: number;
-  outPoint: number;
-}
+import { Clip } from '../types';
 
 /**
  * Generates a smart default filename for export based on clips

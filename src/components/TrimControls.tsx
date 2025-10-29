@@ -1,16 +1,5 @@
 import { useState, useEffect } from "react";
-
-interface Clip {
-  id: string;
-  path: string;
-  filename: string;
-  duration: number;
-  width: number;
-  height: number;
-  codec: string;
-  inPoint: number;
-  outPoint: number;
-}
+import { Clip } from "../types";
 
 interface TrimControlsProps {
   selectedClip: Clip | null;

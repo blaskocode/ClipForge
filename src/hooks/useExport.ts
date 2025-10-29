@@ -2,20 +2,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { generateDefaultFilename } from "../utils/exportHelpers";
-
-interface Clip {
-  id: string;
-  path: string;
-  filename: string;
-  duration: number;
-  width: number;
-  height: number;
-  codec: string;
-  inPoint: number;
-  outPoint: number;
-  volume: number;
-  muted: boolean;
-}
+import { Clip } from "../types";
 
 interface UseExportReturn {
   isExporting: boolean;
@@ -93,8 +80,12 @@ export function useExport(clips: Clip[]): UseExportReturn {
         }
       }
       
-      // Prepare clip data
-      const clipData = clips.map(clip => ({
+      // Separate clips by track
+      const mainTrackClips = clips.filter(clip => clip.track === 'main');
+      const pipTrackClips = clips.filter(clip => clip.track === 'pip');
+      
+      // Prepare clip data for each track
+      const mainTrackData = mainTrackClips.map(clip => ({
         path: clip.path,
         duration: clip.duration,
         inPoint: clip.inPoint,
@@ -103,9 +94,20 @@ export function useExport(clips: Clip[]): UseExportReturn {
         muted: clip.muted,
       }));
       
-      // Export
-      await invoke<string>('export_video', {
-        clips: clipData,
+      const pipTrackData = pipTrackClips.map(clip => ({
+        path: clip.path,
+        duration: clip.duration,
+        inPoint: clip.inPoint,
+        outPoint: clip.outPoint,
+        volume: clip.volume,
+        muted: clip.muted,
+        pipSettings: clip.pipSettings,
+      }));
+      
+      // Export with multi-track support
+      await invoke<string>('export_multi_track_video', {
+        mainTrackClips: mainTrackData,
+        pipTrackClips: pipTrackData,
         outputPath,
       });
       

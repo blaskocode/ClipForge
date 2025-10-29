@@ -1,17 +1,6 @@
 // Custom hook for timeline playback loop with trim skipping
 import { useEffect } from "react";
-
-interface Clip {
-  id: string;
-  path: string;
-  filename: string;
-  duration: number;
-  width: number;
-  height: number;
-  codec: string;
-  inPoint: number;
-  outPoint: number;
-}
+import { Clip } from '../types';
 
 interface UsePlaybackLoopProps {
   isPlaying: boolean;

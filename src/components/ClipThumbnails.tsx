@@ -1,20 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './../App.css';
-
-interface Clip {
-  id: string;
-  path: string;
-  filename: string;
-  duration: number;
-  width: number;
-  height: number;
-  codec: string;
-  inPoint: number;
-  outPoint: number;
-  volume: number;
-  muted: boolean;
-}
+import { Clip } from '../types';
 
 interface ClipThumbnailsProps {
   clip: Clip;

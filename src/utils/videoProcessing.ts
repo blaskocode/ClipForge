@@ -62,6 +62,7 @@ export async function processVideoFile(filePath: string, handlers: VideoProcessi
       outPoint: metadata.duration,
       volume: 100,  // Default to normal volume
       muted: false,  // Default to not muted
+      track: 'main',  // Default to main track
     };
     
     console.log("New clip created:", newClip);
