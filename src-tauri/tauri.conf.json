@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; media-src 'self' asset: https://asset.localhost; connect-src ipc: http://ipc.localhost 'self' https://api.openai.com;",
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
@@ -31,6 +31,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "binaries/ffmpeg",
+      "binaries/ffmpeg-aarch64-apple-darwin",
+      "binaries/ffprobe",
+      "binaries/ffprobe-aarch64-apple-darwin"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,11 +46,11 @@
     ],
     "macOS": {
       "frameworks": [],
-      "minimumSystemVersion": "10.13",
+      "minimumSystemVersion": "10.15",
       "exceptionDomain": "",
       "signingIdentity": null,
       "providerShortName": null,
-      "entitlements": null
+      "entitlements": "Info.plist"
     }
   }
 }

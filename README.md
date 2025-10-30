@@ -5,8 +5,22 @@ A professional-grade desktop video editor built with Tauri 2.0, React, and FFmpe
 ## 🎯 Project Status
 
 **Current Version:** v0.1.0 MVP  
-**Status:** Complete MVP with all core features implemented  
-**Platform:** macOS (ARM64) - Windows support planned for future releases
+**Status:** ✅ Complete MVP with all core features implemented  
+**Platform:** macOS (ARM64) - Windows support planned for future releases  
+**Last Updated:** January 2025
+
+### Download Latest Release
+
+[![Download ClipForge](https://img.shields.io/badge/Download-ClipForge%20v0.1.0-blue?style=for-the-badge&logo=apple)](../../releases)
+
+**Direct Download Links:**
+- **macOS (Apple Silicon)**: [clipforge_0.1.0_aarch64.dmg](../../releases/download/v0.1.0/clipforge_0.1.0_aarch64.dmg) (~150MB)
+- **All Releases**: [View all releases](../../releases)
+
+**System Requirements:**
+- macOS 10.15+ (Catalina or later)
+- Apple Silicon Mac (M1/M2/M3)
+- 4GB RAM minimum, 8GB recommended
 
 ## ✨ Features
 
@@ -41,34 +55,150 @@ A professional-grade desktop video editor built with Tauri 2.0, React, and FFmpe
 - **State Management**: Custom React hooks with history tracking
 - **Styling**: CSS Grid + Flexbox for professional layout
 
-## 🚀 Installation
+## 🚀 Download & Installation
 
-### Download & Install
+### Quick Start (Recommended)
 
-1. **Download the latest release** from the [Releases page](../../releases)
-2. **Download `clipforge_0.1.0_aarch64.dmg`** for macOS (Apple Silicon)
-3. **Install the app** by dragging to Applications folder
-4. **First Launch**: macOS may show a security warning. To bypass:
-   - Go to System Preferences → Security & Privacy
-   - Click "Open Anyway" for ClipForge
-   - Or right-click the app and select "Open"
+1. **Download the latest release**:
+   - Click the download button above, or
+   - Go to the [Releases page](../../releases)
+   - Download `clipforge_0.1.0_aarch64.dmg` for macOS (Apple Silicon)
+   - File size: ~150MB (includes bundled FFmpeg)
+
+2. **Install ClipForge**:
+   - Double-click the downloaded `.dmg` file
+   - Drag ClipForge to your Applications folder
+   - Eject the disk image when done
+
+3. **First Launch**:
+   - Open Applications folder and double-click ClipForge
+   - macOS will show a security warning (this is normal for unsigned apps)
+   - **To bypass the warning**:
+     - Go to **System Preferences** → **Security & Privacy** → **General**
+     - Click **"Open Anyway"** next to the ClipForge warning
+     - Or right-click the app and select **"Open"**
 
 ### System Requirements
 
-- **macOS**: 10.13 or later (Apple Silicon recommended)
-- **RAM**: 4GB minimum, 8GB recommended
-- **Storage**: 100MB for app + space for video files
-- **FFmpeg**: Bundled with the application
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **macOS Version** | 10.15 (Catalina) | 12.0+ (Monterey) |
+| **Architecture** | Apple Silicon (ARM64) | Apple Silicon (M1/M2/M3) |
+| **RAM** | 4GB | 8GB+ |
+| **Storage** | 200MB free | 1GB+ free |
+| **FFmpeg** | Bundled | Bundled |
 
-## 🎮 Usage Guide
+### Supported Video Formats
 
-### Getting Started
+- **Input**: MP4, MOV, AVI, MKV, WebM, M4V, 3GP, FLV, WMV
+- **Output**: MP4 (H.264 with audio)
+- **Resolution**: Up to 4K (source resolution preserved)
+- **Audio**: AAC, MP3, Opus, PCM
 
-1. **Launch ClipForge** from Applications or Spotlight
-2. **Import videos** by dragging files onto the timeline or clicking "Import Video"
-3. **Trim clips** by setting in/out points using the timeline handles or keyboard shortcuts
-4. **Adjust audio** using the volume slider and mute toggle in the controls panel
-5. **Export** your edited video using the Export button or Cmd+E shortcut
+### Troubleshooting Installation
+
+#### "App is damaged and can't be opened"
+```bash
+# Run this command in Terminal to remove the quarantine flag
+sudo xattr -rd com.apple.quarantine /Applications/ClipForge.app
+```
+
+#### "ClipForge cannot be opened because the developer cannot be verified"
+1. Go to **System Preferences** → **Security & Privacy**
+2. Click the **lock icon** and enter your password
+3. Click **"Open Anyway"** under the ClipForge entry
+4. Try opening the app again
+
+#### App won't launch after installation
+1. Check that you have macOS 10.15 or later
+2. Ensure you have at least 4GB of available RAM
+3. Try restarting your Mac and launching again
+4. Check Console.app for any error messages
+
+## 🎮 How to Use ClipForge
+
+### Getting Started (5 minutes)
+
+1. **Launch the App**:
+   - Open ClipForge from Applications folder
+   - Or press `Cmd+Space` and type "ClipForge"
+
+2. **Import Your First Video**:
+   - **Method 1**: Drag video files directly onto the timeline area
+   - **Method 2**: Click the "Import Video" button and select files
+   - **Method 3**: Use `Cmd+I` keyboard shortcut
+
+3. **Basic Editing**:
+   - **Play/Pause**: Press `Spacebar` or click the play button
+   - **Trim Clips**: Drag the yellow handles on the timeline to set in/out points
+   - **Seek**: Click anywhere on the timeline to jump to that position
+
+4. **Export Your Video**:
+   - Click the **"Export"** button in the top-right corner
+   - Choose your export location and filename
+   - Click **"Export"** to start the process
+
+### Step-by-Step Tutorial
+
+#### 1. Import Multiple Videos
+```
+1. Drag 2-3 video files onto the timeline
+2. Notice how they appear as separate clips
+3. Each clip shows thumbnails automatically
+```
+
+#### 2. Arrange Your Timeline
+```
+1. Drag clips left/right to reorder them
+2. Clips will snap together automatically
+3. Use the zoom controls to see more detail
+```
+
+#### 3. Trim Your Clips
+```
+1. Click on a clip to select it
+2. Drag the yellow handles to trim the start/end
+3. Use I/O keys for precise trimming:
+   - Press 'I' to set in point at current position
+   - Press 'O' to set out point at current position
+```
+
+#### 4. Adjust Audio
+```
+1. Select a clip on the timeline
+2. Use the volume slider (0-200%)
+3. Toggle mute button to silence audio
+4. Changes apply to the selected clip only
+```
+
+#### 5. Export Your Project
+```
+1. Click "Export" button (or press Cmd+E)
+2. Choose export location and filename
+3. Click "Export" to start processing
+4. Wait for completion notification
+```
+
+### Advanced Features
+
+#### Timeline Zoom
+- **Zoom In**: `Cmd+=` or use zoom controls
+- **Zoom Out**: `Cmd+-` or use zoom controls  
+- **Zoom to Fit**: `Cmd+0` to see entire timeline
+- **Frame-accurate editing** at high zoom levels
+
+#### Project Management
+- **Save Project**: `Cmd+S` to save your work
+- **Load Project**: `Cmd+O` to open saved project
+- **New Project**: `Cmd+N` to start fresh
+- **Undo/Redo**: `Cmd+Z` / `Cmd+Shift+Z`
+
+#### Professional Workflow
+1. **Rough Cut**: Import all footage and arrange clips
+2. **Fine Tuning**: Use zoom and precise trimming
+3. **Audio Mix**: Adjust volume levels per clip
+4. **Review**: Play through entire timeline
+5. **Export**: Final output with professional settings
 
 ### Keyboard Shortcuts
 
@@ -109,15 +239,20 @@ A professional-grade desktop video editor built with Tauri 2.0, React, and FFmpe
 7. **Export**: Use Cmd+E for quick export or Export button for options
 8. **Save Project**: Use Cmd+S to save your work for later
 
-## 🏗️ Development Setup
+## 🛠️ Development Setup
 
 ### Prerequisites
 
-- **Rust** (install from https://rustup.rs)
-- **Node.js** 18+ (install from https://nodejs.org)
-- **Tauri CLI**: `cargo install tauri-cli`
+Before you begin, ensure you have the following installed:
 
-### Setup
+| Tool | Version | Installation |
+|------|---------|--------------|
+| **Rust** | Latest stable | [rustup.rs](https://rustup.rs) |
+| **Node.js** | 18+ | [nodejs.org](https://nodejs.org) |
+| **Tauri CLI** | Latest | `cargo install tauri-cli` |
+| **Git** | Latest | [git-scm.com](https://git-scm.com) |
+
+### Quick Setup (5 minutes)
 
 1. **Clone the repository:**
    ```bash
@@ -130,32 +265,119 @@ A professional-grade desktop video editor built with Tauri 2.0, React, and FFmpe
    npm install
    ```
 
-3. **Install FFmpeg (for development):**
+3. **Verify FFmpeg binaries:**
    ```bash
-   # macOS with Homebrew
-   brew install ffmpeg
-   
-   # Copy binaries to Tauri bin directory
-   cp /opt/homebrew/bin/ffmpeg src-tauri/bin/ffmpeg-aarch64-apple-darwin
-   cp /opt/homebrew/bin/ffprobe src-tauri/bin/ffprobe-aarch64-apple-darwin
+   # Check that FFmpeg binaries exist
+   ls -la src-tauri/binaries/
+   # Should show: ffmpeg, ffmpeg-aarch64-apple-darwin, ffprobe, ffprobe-aarch64-apple-darwin
    ```
 
-4. **Run in development mode:**
+4. **Start development server:**
    ```bash
    npm run tauri dev
    ```
 
-### Building
+### Development Commands
 
-```bash
-# Build for development
-npm run build
+| Command | Description |
+|---------|-------------|
+| `npm run tauri dev` | Start development server with hot reload |
+| `npm run build` | Build frontend only |
+| `npm run tauri build` | Build production app bundle |
+| `npm run preview` | Preview built frontend |
 
-# Build production package
-npm run tauri build
+### Project Structure
+
+```
+clipforge/
+├── src/                          # React frontend
+│   ├── components/              # UI components
+│   │   ├── VideoPlayer.tsx      # Video preview player
+│   │   ├── Timeline.tsx         # Timeline with zoom support
+│   │   ├── ImportButton.tsx     # File import component
+│   │   ├── ClipThumbnails.tsx   # Thumbnail extraction
+│   │   └── ...                  # Other components
+│   ├── hooks/                   # Custom React hooks
+│   ├── utils/                   # Helper functions
+│   └── App.tsx                  # Root component
+├── src-tauri/                   # Rust backend
+│   ├── src/
+│   │   ├── lib.rs              # Tauri command handlers
+│   │   ├── thumbnails.rs       # Thumbnail generation
+│   │   └── export.rs           # Video export
+│   ├── binaries/               # FFmpeg binaries (bundled)
+│   └── tauri.conf.json         # Tauri configuration
+└── dist/                        # Built frontend
 ```
 
-Output will be in `src-tauri/target/release/bundle/`
+### Building for Production
+
+#### Development Build
+```bash
+npm run build
+# Output: dist/ folder with built frontend
+```
+
+#### Production App Bundle
+```bash
+npm run tauri build
+# Output: src-tauri/target/release/bundle/
+# Contains: .dmg file for macOS distribution
+```
+
+#### Build Output Location
+```
+src-tauri/target/release/bundle/
+├── dmg/
+│   └── clipforge_0.1.0_aarch64.dmg    # macOS installer
+├── macos/
+│   └── clipforge.app                   # macOS app bundle
+└── share/
+    └── create-dmg/                     # DMG creation tools
+```
+
+### Development Tips
+
+#### Hot Reload
+- Frontend changes reload automatically
+- Backend changes require restart: `npm run tauri dev`
+- Check console for any build errors
+
+#### Debugging
+- **Frontend**: Use browser dev tools (F12)
+- **Backend**: Check terminal output for Rust errors
+- **Tauri**: Use `console.log()` in frontend, `println!()` in Rust
+
+#### Testing
+- Test with various video formats
+- Verify FFmpeg path resolution
+- Check thumbnail generation
+- Test export functionality
+
+### Troubleshooting Development
+
+#### "FFmpeg not found" error
+```bash
+# Ensure binaries exist and are executable
+ls -la src-tauri/binaries/
+chmod +x src-tauri/binaries/ffmpeg*
+```
+
+#### Build fails with Rust errors
+```bash
+# Update Rust toolchain
+rustup update
+cargo clean
+npm run tauri dev
+```
+
+#### Frontend build errors
+```bash
+# Clear node modules and reinstall
+rm -rf node_modules package-lock.json
+npm install
+npm run tauri dev
+```
 
 ## 📁 Project Structure
 
@@ -222,21 +444,46 @@ ClipForge/
 - **FFmpeg Dependencies**: Some video formats may require additional codecs
 - **Large Files**: Very large video files (>2GB) may cause performance issues
 
+## 🆕 What's New in v0.1.0
+
+### ✨ Major Features
+- **Professional Timeline**: Frame-accurate editing with zoom support
+- **Multi-format Support**: Import MP4, MOV, AVI, MKV, WebM, and more
+- **Automatic Thumbnails**: Filmstrip preview for all video clips
+- **Audio Controls**: Per-clip volume adjustment and mute
+- **Project Management**: Save/load projects with full state preservation
+- **Undo/Redo System**: Complete history tracking for all actions
+- **Professional Export**: H.264 with audio support
+- **Keyboard Shortcuts**: Professional-grade shortcuts for all functions
+
+### 🔧 Technical Improvements
+- **Tauri 2.0**: Latest desktop app framework
+- **Bundled FFmpeg**: No external dependencies required
+- **Production Ready**: Fixed thumbnail generation in deployed apps
+- **macOS Optimized**: Native Apple Silicon support
+- **Error Handling**: Comprehensive error reporting and recovery
+
 ## 🔮 Roadmap
 
-### Future Enhancements (Post-MVP)
-
+### v1.1 (Coming Soon)
+- **Screen Recording**: Built-in screen capture functionality
+- **Webcam Recording**: Simultaneous screen + webcam recording
 - **Clip Reordering**: Drag clips to reorder on timeline
 - **Auto-save**: Automatic project saving and crash recovery
+
+### v1.2 (Future)
 - **Timeline Markers**: Add markers and labels for organization
 - **Clip Splitting**: Split clips at playhead position
 - **Transitions**: Fade, dissolve, and wipe transitions
 - **Video Effects**: Brightness, contrast, and color filters
 - **Text Overlays**: Add titles and captions
+
+### v2.0 (Long-term)
 - **Audio Waveform**: Visual audio representation
 - **Multi-track Timeline**: Separate audio and video tracks
 - **Export Presets**: Pre-configured export settings
 - **Windows Support**: Cross-platform compatibility
+- **Cloud Integration**: Google Drive upload support
 
 ## 📚 Documentation
 

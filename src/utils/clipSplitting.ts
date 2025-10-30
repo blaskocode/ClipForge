@@ -4,7 +4,7 @@
  */
 
 import { Clip } from '../types';
-import { calculateLocalTimeInClip, findActiveClipAtTime } from './timelineCalculations';
+import { calculateLocalTimeInClip, findActiveClipAtTime, calculateClipStartTime } from './timelineCalculations';
 
 /**
  * Split a clip at the specified timeline position
@@ -15,11 +15,16 @@ export function splitClipAtTime(
   timelinePosition: number,
   allClips: Clip[]
 ): Clip[] {
-  // Calculate local time within the clip
-  const localTime = calculateLocalTimeInClip(clipToSplit, timelinePosition, allClips);
+  // Calculate local time within the clip's timeline position (0 to trimmed duration)
+  const localTimeInTimeline = calculateLocalTimeInClip(clipToSplit, timelinePosition, allClips);
   
-  // Validate split point is within clip bounds
-  if (localTime <= clipToSplit.inPoint || localTime >= clipToSplit.outPoint) {
+  // Convert to absolute time in clip source (accounting for inPoint)
+  const clipInPoint = clipToSplit.inPoint || 0;
+  const clipOutPoint = clipToSplit.outPoint || clipToSplit.duration;
+  const absoluteTimeInClip = clipInPoint + localTimeInTimeline;
+  
+  // Validate split point is within clip bounds (trimmed visible portion)
+  if (absoluteTimeInClip <= clipInPoint || absoluteTimeInClip >= clipOutPoint) {
     throw new Error('Cannot split clip at this position - split point must be within clip boundaries');
   }
   
@@ -30,32 +35,32 @@ export function splitClipAtTime(
   }
   
   // Calculate source file offset (where clip starts in the original file)
-  // If clip was previously split, use sourceOffset; otherwise use inPoint
-  const sourceStartOffset = clipToSplit.sourceOffset ?? clipToSplit.inPoint;
+  // If clip was previously split, use sourceOffset; otherwise use 0
+  const sourceStartOffset = clipToSplit.sourceOffset ?? 0;
   
-  // Create first half of the split clip (0 to split point relative to clip)
-  // Part 1: starts at sourceStartOffset, ends at sourceStartOffset + localTime
-  const firstClipDuration = localTime - clipToSplit.inPoint;
+  // Create first half of the split clip (from inPoint to split point)
+  // Part 1: starts at sourceStartOffset + clipInPoint, ends at sourceStartOffset + absoluteTimeInClip
+  const firstClipAbsoluteDuration = absoluteTimeInClip - clipInPoint;
   const firstClip: Clip = {
     ...clipToSplit,
     id: `${clipToSplit.id}-part1-${Date.now()}`,
     inPoint: 0,  // Clean clip, starts at 0
-    outPoint: firstClipDuration,  // Ends at its duration
-    duration: firstClipDuration,
-    sourceOffset: sourceStartOffset,  // Where Part 1 starts in source file
+    outPoint: firstClipAbsoluteDuration,  // Ends at its duration
+    duration: firstClipAbsoluteDuration,
+    sourceOffset: sourceStartOffset + clipInPoint,  // Where Part 1 starts in source file
     filename: `${clipToSplit.filename} (Part 1)`,
   };
   
-  // Create second half of the split clip (split point to end relative to clip)
-  // Part 2: starts at sourceStartOffset + localTime, ends at sourceStartOffset + clipToSplit.outPoint
-  const part2Duration = clipToSplit.outPoint - localTime;
+  // Create second half of the split clip (from split point to outPoint)
+  // Part 2: starts at sourceStartOffset + absoluteTimeInClip, ends at sourceStartOffset + clipOutPoint
+  const part2AbsoluteDuration = clipOutPoint - absoluteTimeInClip;
   const secondClip: Clip = {
     ...clipToSplit,
     id: `${clipToSplit.id}-part2-${Date.now()}`,
     inPoint: 0,  // Clean clip, starts at 0
-    outPoint: part2Duration,  // Ends at its duration
-    duration: part2Duration,
-    sourceOffset: sourceStartOffset + localTime,  // Where Part 2 starts in source file
+    outPoint: part2AbsoluteDuration,  // Ends at its duration
+    duration: part2AbsoluteDuration,
+    sourceOffset: sourceStartOffset + absoluteTimeInClip,  // Where Part 2 starts in source file
     filename: `${clipToSplit.filename} (Part 2)`,
   };
   
@@ -101,14 +106,22 @@ export function splitClipAtPlayhead(
   }
   
   // Validate we can split (split point must be within trim boundaries)
-  const localTime = calculateLocalTimeInClip(clipToSplit, playheadPosition, allClips);
+  // localTime is the time within the visible trimmed portion (0 to trimmed duration)
+  // We need to convert this to absolute clip time to check against inPoint/outPoint
+  const clipStartTime = calculateClipStartTime(clipToSplit, allClips);
+  const localTimeInTimeline = playheadPosition - clipStartTime;
+  
+  // Calculate absolute time in clip source (accounting for inPoint)
+  const clipInPoint = clipToSplit.inPoint || 0;
+  const clipOutPoint = clipToSplit.outPoint || clipToSplit.duration;
+  const absoluteTimeInClip = clipInPoint + localTimeInTimeline;
   
   // Can't split at or before inPoint, or at or after outPoint
-  if (localTime <= clipToSplit.inPoint || localTime >= clipToSplit.outPoint) {
+  if (absoluteTimeInClip <= clipInPoint || absoluteTimeInClip >= clipOutPoint) {
     return null; // Invalid split position
   }
   
-  // Perform the split
+  // Perform the split (splitClipAtTime will use playheadPosition to calculate the split point)
   const newClips = splitClipAtTime(clipToSplit, playheadPosition, allClips);
   
   // Find the first half (it will be inserted right after the original clip's position)

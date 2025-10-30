@@ -15,7 +15,6 @@ import { MediaLibrary } from "./components/MediaLibrary";
 import { ExportSettingsModal, ExportResolution } from "./components/ExportSettingsModal";
 import { FillerWordsPanel } from "./components/FillerWordsPanel";
 import { ApiKeyModal } from "./components/ApiKeyModal";
-import { invoke } from "@tauri-apps/api/core";
 import { Toast, showSuccessToast, showErrorToast, TOAST_MESSAGES } from "./utils/toastHelpers";
 import { useHistory, HistoryState } from "./hooks/useHistory";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -35,6 +34,22 @@ import { FillerWord } from "./types";
 import "./App.css";
 
 function App() {
+  // Check mediaDevices availability on mount (for debugging)
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      if (!navigator.mediaDevices) {
+        console.error('navigator.mediaDevices is not available. Recording features will not work.');
+        console.error('This may indicate a configuration issue with the Tauri WebView.');
+      } else {
+        console.log('MediaDevices API is available:', {
+          getUserMedia: typeof navigator.mediaDevices.getUserMedia === 'function',
+          getDisplayMedia: typeof navigator.mediaDevices.getDisplayMedia === 'function',
+          enumerateDevices: typeof navigator.mediaDevices.enumerateDevices === 'function'
+        });
+      }
+    }
+  }, []);
+
   // Initialize history with empty state
   const initialState: HistoryState = {
     clips: [],
@@ -291,6 +306,51 @@ function App() {
   const handleSplitClip = () => {
     const currentPlayheadPosition = playheadPositionRef.current;
     
+    // If a clip is selected, try to split that clip first (regardless of track)
+    if (selectedClipId) {
+      const selectedClip = clips.find(c => c.id === selectedClipId);
+      if (selectedClip) {
+        // Check if playhead is within the selected clip's trimmed visible portion
+        const trackClips = clips
+          .filter(c => c.track === selectedClip.track)
+          .sort((a, b) => {
+            const aIndex = clips.findIndex(c => c.id === a.id);
+            const bIndex = clips.findIndex(c => c.id === b.id);
+            return aIndex - bIndex;
+          });
+        
+        const clipIndex = trackClips.findIndex(c => c.id === selectedClip.id);
+        let clipStartTime = 0;
+        for (let i = 0; i < clipIndex; i++) {
+          const trimmedDuration = (trackClips[i].outPoint || trackClips[i].duration) - (trackClips[i].inPoint || 0);
+          clipStartTime += trimmedDuration;
+        }
+        
+        const clipEndTime = clipStartTime + ((selectedClip.outPoint || selectedClip.duration) - (selectedClip.inPoint || 0));
+        
+        // Check if playhead is within the selected clip
+        if (currentPlayheadPosition >= clipStartTime && currentPlayheadPosition < clipEndTime) {
+          // Split the selected clip
+          const result = splitClipAtPlayhead(currentPlayheadPosition, clips, selectedClip.track);
+          
+          if (result) {
+            pushState({
+              clips: result.newClips,
+              selectedClipId: result.selectedClipId,
+            });
+            
+            addToast(showSuccessToast(TOAST_MESSAGES.CLIP_SPLIT || 'Clip split successfully'));
+            return;
+          } else {
+            // Split position is invalid (at edge of trimmed clip)
+            addToast(showErrorToast('Cannot split clip at this position. Move playhead to the middle of the clip.'));
+            return;
+          }
+        }
+      }
+    }
+    
+    // No selected clip, or selected clip is not at playhead - use default behavior
     // Try to split on main track first, fallback to pip track
     const result = splitClipAtPlayhead(currentPlayheadPosition, clips, 'main');
     
@@ -365,7 +425,7 @@ function App() {
     }
   };
 
-  // Handle recording completion
+  // Handle recording completion - add recordings to Media Library
   const handleRecordingComplete = async (
     startTime: number,
     duration: number,
@@ -375,128 +435,86 @@ function App() {
     console.log('handleRecordingComplete called:', { startTime, duration, screenFile, webcamFile });
     
     try {
-      const newClips: Clip[] = [];
+        // Wait longer to ensure files are fully written to disk and flushed
+        // WebM files from MediaRecorder may need extra time for metadata to be finalized
+        await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Add screen recording to main track
+      const processedClips: Clip[] = [];
+      
+      // Process screen recording using the same pipeline as regular imports
       if (screenFile) {
-        console.log('Getting metadata for screen recording:', screenFile);
+        console.log('Processing screen recording through videoProcessing pipeline:', screenFile);
         try {
-          // Try to get metadata, but use recording duration as fallback
-          let width = 1920; // Default fallback
-          let height = 1080; // Default fallback
-          let codec = 'vp9'; // MediaRecorder uses VP9 for WebM
-          let fileSize: number | undefined = undefined;
-          
-          try {
-            const metadata = await invoke<{
-              duration: number;
-              width: number;
-              height: number;
-              codec: string;
-              file_size: number;
-            }>('get_video_metadata', { filePath: screenFile });
-            
-            console.log('Screen recording metadata:', metadata);
-            
-            // Use metadata if available, otherwise use defaults
-            width = metadata.width || width;
-            height = metadata.height || height;
-            codec = metadata.codec || codec;
-            fileSize = metadata.file_size;
-          } catch (error) {
-            console.warn('Could not get full metadata for screen recording, using defaults and calculated duration:', error);
-            // Continue with calculated duration and defaults
-          }
-          
-          newClips.push({
-            id: crypto.randomUUID(),
-            path: screenFile,
-            filename: `Screen Recording ${new Date(startTime).toLocaleTimeString()}`,
-            duration: duration, // Use calculated duration from recording
-            width: width,
-            height: height,
-            codec: codec,
-            inPoint: 0,
-            outPoint: duration,
-            volume: 100,
-            muted: false,
-            track: 'main',
-            fileSize: fileSize,
+          const newClip = await processVideoFile(screenFile, {
+            clips: [...clips, ...libraryClips],
+            addToast,
+            showSuccessToast,
+            showErrorToast,
+            pushState,
+            selectedClipId,
+            TOAST_MESSAGES,
           });
+          
+          if (newClip) {
+            // Override filename to be more descriptive
+            newClip.filename = `Screen Recording ${new Date(startTime).toLocaleTimeString()}`;
+            processedClips.push(newClip);
+            console.log('Screen recording added to library:', newClip);
+          } else {
+            console.error('processVideoFile returned null for screen recording');
+            addToast(showErrorToast('Failed to process screen recording - file may be invalid'));
+          }
         } catch (error) {
-          console.error('Failed to create clip for screen recording:', error);
-          addToast(showErrorToast(`Failed to process screen recording: ${error instanceof Error ? error.message : 'Unknown error'}`));
+          console.error('Failed to process screen recording:', error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          addToast(showErrorToast(`Failed to process screen recording: ${errorMessage}`));
         }
       }
       
-      // Add webcam recording to PiP track
+      // Process webcam recording using the same pipeline as regular imports
       if (webcamFile) {
-        console.log('Getting metadata for webcam recording:', webcamFile);
+        console.log('Processing webcam recording through videoProcessing pipeline:', webcamFile);
         try {
-          // Try to get metadata, but use recording duration as fallback
-          let width = 1280; // Default fallback
-          let height = 720; // Default fallback
-          let codec = 'vp9'; // MediaRecorder uses VP9 for WebM
-          let fileSize: number | undefined = undefined;
-          
-          try {
-            const metadata = await invoke<{
-              duration: number;
-              width: number;
-              height: number;
-              codec: string;
-              file_size: number;
-            }>('get_video_metadata', { filePath: webcamFile });
-            
-            console.log('Webcam recording metadata:', metadata);
-            
-            // Use metadata if available, otherwise use defaults
-            width = metadata.width || width;
-            height = metadata.height || height;
-            codec = metadata.codec || codec;
-            fileSize = metadata.file_size;
-          } catch (error) {
-            console.warn('Could not get full metadata for webcam recording, using defaults and calculated duration:', error);
-            // Continue with calculated duration and defaults
-          }
-          
-          newClips.push({
-            id: crypto.randomUUID(),
-            path: webcamFile,
-            filename: `Webcam Recording ${new Date(startTime).toLocaleTimeString()}`,
-            fileSize: fileSize,
-            duration: duration, // Use calculated duration from recording
-            width: width,
-            height: height,
-            codec: codec,
-            inPoint: 0,
-            outPoint: duration,
-            volume: 100,
-            muted: false,
-            track: 'pip'
+          const newClip = await processVideoFile(webcamFile, {
+            clips: [...clips, ...libraryClips],
+            addToast,
+            showSuccessToast,
+            showErrorToast,
+            pushState,
+            selectedClipId,
+            TOAST_MESSAGES,
           });
+          
+          if (newClip) {
+            // Override filename to be more descriptive
+            newClip.filename = `Webcam Recording ${new Date(startTime).toLocaleTimeString()}`;
+            processedClips.push(newClip);
+            console.log('Webcam recording added to library:', newClip);
+          } else {
+            console.error('processVideoFile returned null for webcam recording');
+            addToast(showErrorToast('Failed to process webcam recording - file may be invalid'));
+          }
         } catch (error) {
-          console.error('Failed to create clip for webcam recording:', error);
-          addToast(showErrorToast(`Failed to process webcam recording: ${error instanceof Error ? error.message : 'Unknown error'}`));
+          console.error('Failed to process webcam recording:', error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          addToast(showErrorToast(`Failed to process webcam recording: ${errorMessage}`));
         }
       }
       
-      if (newClips.length > 0) {
-        console.log('Adding clips to timeline:', newClips);
-        pushState({
-          clips: [...clips, ...newClips],
-          selectedClipId: newClips[0]?.id || null
-        });
-        
-        addToast(showSuccessToast(`Recording${newClips.length > 1 ? 's' : ''} added to timeline`));
+      // Add processed clips to Media Library
+      if (processedClips.length > 0) {
+        setLibraryClips(prev => [...prev, ...processedClips]);
+        addToast(showSuccessToast(
+          `Recording${processedClips.length > 1 ? 's' : ''} added to Media Library. Drag them to the timeline to use them.`
+        ));
         setShowRecordingModal(false);
       } else {
-        console.warn('No clips to add - both clip creations may have failed');
-        addToast(showErrorToast('Recording saved but could not be added to timeline'));
+        console.warn('No clips were processed successfully');
+        addToast(showErrorToast('Recordings were saved but could not be processed. They may be in your Videos/ClipForge Recordings folder.'));
       }
     } catch (error) {
       console.error('Failed to finalize recording:', error);
-      addToast(showErrorToast(`Failed to add recording to timeline: ${error instanceof Error ? error.message : 'Unknown error'}`));
+      addToast(showErrorToast(`Failed to process recordings: ${error instanceof Error ? error.message : 'Unknown error'}`));
     }
   };
 

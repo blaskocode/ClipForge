@@ -262,32 +262,42 @@ export function RecordingModal({ isOpen, onClose, onRecordingComplete }: Recordi
       webcamState: state.webcamRecorder?.state
     });
     
-    // Create promises to wait for recorder stop events
+    // Stop all recorders simultaneously for perfect synchronization
     const stopPromises: Promise<void>[] = [];
+    const stopTime = Date.now();
     
     if (state.screenRecorder && state.screenRecorder.state !== 'inactive') {
       const screenStopPromise = new Promise<void>((resolve) => {
         state.screenRecorder!.onstop = () => {
-          console.log('Screen recorder stopped, final chunks:', state.screenChunks.length);
+          console.log('Screen recorder stopped at', stopTime, 'final chunks:', state.screenChunks.length);
           resolve();
         };
-        state.screenRecorder!.stop();
       });
       stopPromises.push(screenStopPromise);
+      // Don't call stop() here yet - we'll call all stops synchronously below
     }
     
     if (state.webcamRecorder && state.webcamRecorder.state !== 'inactive') {
       const webcamStopPromise = new Promise<void>((resolve) => {
         state.webcamRecorder!.onstop = () => {
-          console.log('Webcam recorder stopped, final chunks:', state.webcamChunks.length);
+          console.log('Webcam recorder stopped at', stopTime, 'final chunks:', state.webcamChunks.length);
           resolve();
         };
-        state.webcamRecorder!.stop();
       });
       stopPromises.push(webcamStopPromise);
+      // Don't call stop() here yet - we'll call all stops synchronously below
     }
 
-    // Wait for all recorders to stop and collect final chunks
+    // Now stop all recorders simultaneously (synchronously, no await between calls)
+    console.log(`Stopping ${stopPromises.length} recorder(s) simultaneously at ${stopTime}...`);
+    if (state.screenRecorder && state.screenRecorder.state !== 'inactive') {
+      state.screenRecorder.stop();
+    }
+    if (state.webcamRecorder && state.webcamRecorder.state !== 'inactive') {
+      state.webcamRecorder.stop();
+    }
+
+    // Wait for all recorders to finish stopping and collect final chunks
     await Promise.all(stopPromises);
 
     // Give a small additional delay for any remaining data events

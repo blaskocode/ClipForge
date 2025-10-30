@@ -14,6 +14,15 @@ use export::{export_video, export_multi_track_video};
 use filler_detection::detect_filler_words;
 
 #[tauri::command]
+async fn restart_app(_app: tauri::AppHandle) -> Result<(), String> {
+    // Note: Tauri v2 doesn't have a built-in restart method
+    // The frontend will show a message prompting the user to manually restart
+    // or we could use std::process::Command to execute a restart script, but that's complex
+    // For now, we'll just return success and let the frontend handle the restart prompt
+    Ok(())
+}
+
+#[tauri::command]
 async fn validate_video_file(file_path: String) -> Result<String, String> {
     validate_video_file_internal(file_path).await
 }
@@ -445,13 +454,13 @@ pub async fn get_video_metadata_internal(_app: tauri::AppHandle, file_path: Stri
 pub fn get_ffmpeg_path() -> Result<std::path::PathBuf, String> {
     // Try multiple possible locations for FFmpeg
     let possible_paths = [
-        // Bundled binaries (for production)
+        // Bundled binaries (for production) - these will be in the app bundle
         std::path::PathBuf::from("binaries/ffmpeg-aarch64-apple-darwin"),
         std::path::PathBuf::from("binaries/ffmpeg"),
-        // Development paths
+        // Development paths (relative to project root)
         std::path::PathBuf::from("ffmpeg"),
         std::path::PathBuf::from("ffmpeg-aarch64-apple-darwin"),
-        // System paths
+        // System paths (fallback)
         std::path::PathBuf::from("/opt/homebrew/bin/ffmpeg"),
         std::path::PathBuf::from("/usr/local/bin/ffmpeg"),
         std::path::PathBuf::from("/usr/bin/ffmpeg"),
@@ -469,13 +478,13 @@ pub fn get_ffmpeg_path() -> Result<std::path::PathBuf, String> {
 pub fn get_ffprobe_path() -> Result<std::path::PathBuf, String> {
     // Try multiple possible locations for FFprobe
     let possible_paths = [
-        // Bundled binaries (for production)
+        // Bundled binaries (for production) - these will be in the app bundle
         std::path::PathBuf::from("binaries/ffprobe-aarch64-apple-darwin"),
         std::path::PathBuf::from("binaries/ffprobe"),
-        // Development paths
+        // Development paths (relative to project root)
         std::path::PathBuf::from("ffprobe"),
         std::path::PathBuf::from("ffprobe-aarch64-apple-darwin"),
-        // System paths
+        // System paths (fallback)
         std::path::PathBuf::from("/opt/homebrew/bin/ffprobe"),
         std::path::PathBuf::from("/usr/local/bin/ffprobe"),
         std::path::PathBuf::from("/usr/bin/ffprobe"),
@@ -537,6 +546,21 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_macos_permissions::init())
+        .setup(|_app| {
+            // Note: Asset protocol scope is configured in tauri.conf.json with "scope": ["**"]
+            // which allows access to all directories. This should be sufficient for file access
+            // in production builds. The dynamic scope API may not be available in Tauri v2, 
+            // but the config-based approach with "scope": ["**"] works for all file access.
+            
+            // Ensure the recordings directory exists
+            if let Some(videos_dir) = dirs::video_dir() {
+                let recordings_dir = videos_dir.join("ClipForge Recordings");
+                std::fs::create_dir_all(&recordings_dir).ok();
+            }
+            
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             validate_video_file,
             select_video_file,
@@ -548,7 +572,8 @@ pub fn run() {
             save_project,
             load_project,
             save_recording,
-            detect_filler_words
+            detect_filler_words,
+            restart_app
             // Commands will be added in future PRs:
             // - check_codec_compatibility
         ])
